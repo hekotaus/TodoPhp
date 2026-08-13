@@ -250,11 +250,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'add') {
         $task = trim((string) ($_POST['task'] ?? ''));
         if ($task !== '') {
+            $status = clean_status($_POST['status'] ?? null);
+            // New tasks start at 0% — unless added as DONE, which means 100%.
+            $completion = $status === 'DONE' ? 100 : 0;
             $items[] = [
                 'id'         => new_id(),
                 'task'       => $task,
-                'status'     => clean_status($_POST['status'] ?? null),
-                'completion' => clean_completion($_POST['completion'] ?? 0),
+                'status'     => $status,
+                'completion' => $completion,
                 'group'      => clean_group($_POST['group'] ?? ''),
             ];
             save_data($listName, $items);
@@ -560,9 +563,6 @@ function move_options(string $currentGroup, array $allGroups): string
     </label>
     <label>Status
         <select name="status"><?= status_options('PENDING') ?></select>
-    </label>
-    <label>Completion %
-        <input type="number" name="completion" min="0" max="100" step="1" value="0">
     </label>
     <button class="primary" type="submit">Add item</button>
 </form>
