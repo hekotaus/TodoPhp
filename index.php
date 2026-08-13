@@ -61,6 +61,25 @@ if ($paramFile !== null) {
 }
 define('DATA_FILE', DATA_DIR . DIRECTORY_SEPARATOR . ($selectedFile ?? 'todo.json'));
 
+/** Current signature (mtime + size) of the data file; 0/0 if it doesn't exist. */
+function file_signature(): array
+{
+    clearstatcache(true, DATA_FILE);
+    if (!is_file(DATA_FILE)) {
+        return ['mtime' => 0, 'size' => 0];
+    }
+    return ['mtime' => (int) filemtime(DATA_FILE), 'size' => (int) filesize(DATA_FILE)];
+}
+
+// Lightweight polling endpoint: returns the data file's change signature so the
+// page can auto-refresh when the file is modified elsewhere.
+if (($_GET['poll'] ?? '') === '1') {
+    header('Content-Type: application/json');
+    header('Cache-Control: no-store');
+    echo json_encode(file_signature());
+    exit;
+}
+
 const STATUSES = ['PENDING', 'PROGRESS', 'DEPENDING', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
 
 /** Display order of statuses within a group (lower = shown first). */
@@ -387,6 +406,9 @@ $buckets  = group_items($items);
 // Sticky defaults for the add form (kept from the last added item).
 $addGroup  = clean_group($_COOKIE['add_group'] ?? '');
 $addStatus = clean_status($_COOKIE['add_status'] ?? 'PENDING');
+
+// Data-file change signature at render time, for the auto-refresh poll.
+$fileSig = file_signature();
 
 // Data files available in the app folder, plus the current one (which may not
 // exist on disk yet if nothing has been saved).
@@ -734,6 +756,26 @@ function moveItem(sel) {
     form.submit();
 }
 
+// After a reload, browsers restore the previous values of form controls, which
+// would show a stale status/task/completion (e.g. the status chip recolours but
+// the dropdown text stays old). Force every row control back to its
+// server-rendered value so the page always reflects the file on disk.
+function resetRowControls() {
+    document.querySelectorAll('.groups select, .groups input').forEach(function (el) {
+        if (el.tagName === 'SELECT') {
+            var idx = 0;
+            for (var i = 0; i < el.options.length; i++) {
+                if (el.options[i].defaultSelected) { idx = i; break; }
+            }
+            el.selectedIndex = idx;
+        } else if (el.type !== 'hidden') {
+            el.value = el.defaultValue;
+        }
+    });
+}
+resetRowControls();
+window.addEventListener('pageshow', resetRowControls);
+
 (function () {
     // Remember which groups are collapsed, per browser.
     var KEY = 'todo-collapsed-groups';
@@ -768,6 +810,36 @@ function moveItem(sel) {
     var ca = document.getElementById('collapse-all');
     if (ea) ea.addEventListener('click', function () { setAll(true); });
     if (ca) ca.addEventListener('click', function () { setAll(false); });
+})();
+
+// Auto-refresh: poll the data file's change signature and reload if it changed
+// on disk (e.g. edited in another tab or by another process). Skips reloading
+// while you're editing a field so it never interrupts typing.
+(function () {
+    var current = { mtime: <?= (int) $fileSig['mtime'] ?>, size: <?= (int) $fileSig['size'] ?> };
+    var file = <?= json_encode($currentFile, JSON_UNESCAPED_SLASHES) ?>;
+    var url = '?poll=1&file=' + encodeURIComponent(file);
+
+    function editing() {
+        var a = document.activeElement;
+        return a && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName);
+    }
+
+    function check() {
+        if (document.hidden) return;   // don't poll a background tab
+        fetch(url, { cache: 'no-store' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (!d) return;
+                if (d.mtime !== current.mtime || d.size !== current.size) {
+                    if (editing()) return;   // try again next tick, don't clobber edits
+                    window.location.reload();
+                }
+            })
+            .catch(function () { /* ignore transient errors */ });
+    }
+
+    setInterval(check, 4000);
 })();
 </script>
 </body>

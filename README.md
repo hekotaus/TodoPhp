@@ -102,6 +102,10 @@ disk.
 
 ## Notes
 
+- The page auto-refreshes when the data file changes on disk (edited in another
+  tab or by another process). It polls a lightweight endpoint every few seconds
+  and reloads only when the file's timestamp/size changes — never while you're
+  typing in a field, and not while the tab is in the background.
 - All output is HTML-escaped, so item names are safe to display.
 - Writes use an exclusive file lock so concurrent requests don't corrupt the
   data file.
