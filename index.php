@@ -248,9 +248,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $items    = $data['items'];
 
     if ($action === 'add') {
-        $task = trim((string) ($_POST['task'] ?? ''));
+        $task   = trim((string) ($_POST['task'] ?? ''));
+        $status = clean_status($_POST['status'] ?? null);
+        $group  = clean_group($_POST['group'] ?? '');
+        // Remember the last-used group and status so the add form keeps them
+        // for the next item (handy when adding several to the same group).
+        setcookie('add_group', $group, ['path' => '/', 'samesite' => 'Lax']);
+        setcookie('add_status', $status, ['path' => '/', 'samesite' => 'Lax']);
         if ($task !== '') {
-            $status = clean_status($_POST['status'] ?? null);
             // New tasks start at 0% — unless added as DONE, which means 100%.
             $completion = $status === 'DONE' ? 100 : 0;
             $items[] = [
@@ -258,7 +263,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'task'       => $task,
                 'status'     => $status,
                 'completion' => $completion,
-                'group'      => clean_group($_POST['group'] ?? ''),
+                'group'      => $group,
             ];
             save_data($listName, $items);
         }
@@ -372,6 +377,10 @@ $listName = $data['name'];
 $items    = $data['items'];
 $groups   = existing_groups($items);
 $buckets  = group_items($items);
+
+// Sticky defaults for the add form (kept from the last added item).
+$addGroup  = clean_group($_COOKIE['add_group'] ?? '');
+$addStatus = clean_status($_COOKIE['add_status'] ?? 'PENDING');
 
 // Data files available in the app folder, plus the current one (which may not
 // exist on disk yet if nothing has been saved).
@@ -559,10 +568,10 @@ function move_options(string $currentGroup, array $allGroups): string
         <input type="text" name="task" required>
     </label>
     <label>Group
-        <input type="text" name="group" list="group-list" placeholder="(optional)">
+        <input type="text" name="group" list="group-list" placeholder="(optional)" value="<?= e($addGroup) ?>">
     </label>
     <label>Status
-        <select name="status"><?= status_options('PENDING') ?></select>
+        <select name="status"><?= status_options($addStatus) ?></select>
     </label>
     <button class="primary" type="submit">Add item</button>
 </form>
