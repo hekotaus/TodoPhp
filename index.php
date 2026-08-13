@@ -242,10 +242,11 @@ function group_progress(array $groupItems): int
 // doesn't re-submit the form.
 // ---------------------------------------------------------------------------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $action   = $_POST['action'] ?? '';
-    $data     = load_data();
-    $listName = $data['name'];
-    $items    = $data['items'];
+    $action     = $_POST['action'] ?? '';
+    $data       = load_data();
+    $listName   = $data['name'];
+    $items      = $data['items'];
+    $activeFile = basename(DATA_FILE);   // carried into the redirect URL
 
     if ($action === 'add') {
         $task   = trim((string) ($_POST['task'] ?? ''));
@@ -343,6 +344,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 file_put_contents($path, $seed, LOCK_EX);
             }
             setcookie('todo_file', $fname, ['path' => '/', 'samesite' => 'Lax']);
+            $activeFile = $fname;
         }
     } elseif ($action === 'delete_file') {
         // Delete a data file and switch to another (or back to the default).
@@ -358,14 +360,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $remaining = array_values($remaining);
             if (!empty($remaining)) {
                 setcookie('todo_file', $remaining[0], ['path' => '/', 'samesite' => 'Lax']);
+                $activeFile = $remaining[0];
             } else {
                 // Nothing left: clear the selection so it falls back to todo.json.
                 setcookie('todo_file', '', ['path' => '/', 'expires' => 1]);
+                $activeFile = 'todo.json';
             }
         }
     }
 
-    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?'));
+    // Redirect back including the active file in the URL, so a later refresh
+    // reads the current file even if cookies aren't available.
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?file=' . rawurlencode($activeFile));
     exit;
 }
 
