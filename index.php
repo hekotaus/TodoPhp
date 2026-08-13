@@ -61,10 +61,10 @@ if ($paramFile !== null) {
 }
 define('DATA_FILE', DATA_DIR . DIRECTORY_SEPARATOR . ($selectedFile ?? 'todo.json'));
 
-const STATUSES = ['PENDING', 'DEPENDING', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
+const STATUSES = ['PENDING', 'PROGRESS', 'DEPENDING', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
 
 /** Display order of statuses within a group (lower = shown first). */
-const STATUS_ORDER = ['URGENT', 'UNDONE', 'PENDING', 'DEPENDING', 'DONE', 'SKIPPED'];
+const STATUS_ORDER = ['PROGRESS', 'URGENT', 'UNDONE', 'PENDING', 'DEPENDING', 'DONE', 'SKIPPED'];
 
 /** Label used for items that have no group assigned. */
 const UNGROUPED = 'Ungrouped';
@@ -501,6 +501,7 @@ function move_options(string $currentGroup, array $allGroups): string
 
     select.status { font-weight: 600; font-size: .72rem; border-radius: 10px; padding: .1rem .4rem; border: 1px solid transparent; cursor: pointer; }
     select.status.PENDING   { background: #eef; color: #445; }
+    select.status.PROGRESS  { background: #d6e4ff; color: #1d4ed8; }
     select.status.DEPENDING { background: #fef3d6; color: #8a6d1c; }
     select.status.DONE      { background: #dff5e1; color: #256b34; }
     select.status.UNDONE    { background: #fde2e0; color: #b02a20; }

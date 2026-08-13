@@ -7,7 +7,8 @@ Each item has a **task** (its name), a **group**, a **status**, and a
 **completion percentage** (0–100). In the data file this is the `task` key on
 each item.
 
-Valid statuses: `PENDING`, `DEPENDING`, `DONE`, `UNDONE`, `URGENT`, `SKIPPED`.
+Valid statuses: `PENDING`, `PROGRESS`, `DEPENDING`, `DONE`, `UNDONE`,
+`URGENT`, `SKIPPED`.
 
 ## List name
 
@@ -27,7 +28,8 @@ Use the small *rename* link next to a group header to rename that group across
 all its items at once.
 
 Within each group, items are automatically ordered by status in this
-priority: **URGENT, UNDONE, PENDING, DEPENDING, DONE, SKIPPED**. Items sharing
+priority: **PROGRESS, URGENT, UNDONE, PENDING, DEPENDING, DONE, SKIPPED**.
+Items sharing
 the same status keep the order they were added in, and changing an item's
 status re-sorts it into place.
 
