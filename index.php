@@ -243,17 +243,18 @@ function group_items(array $items): array
     return $buckets;
 }
 
-/** Average completion across a set of items (0-100, integer). */
+/** Average completion across a group's items (0-100), excluding SKIPPED. */
 function group_progress(array $groupItems): int
 {
-    if (empty($groupItems)) {
+    $counted = array_filter($groupItems, static fn($it) => ($it['status'] ?? '') !== 'SKIPPED');
+    if (empty($counted)) {
         return 0;
     }
     $sum = 0;
-    foreach ($groupItems as $it) {
+    foreach ($counted as $it) {
         $sum += (int) $it['completion'];
     }
-    return (int) round($sum / count($groupItems));
+    return (int) round($sum / count($counted));
 }
 
 // ---------------------------------------------------------------------------
