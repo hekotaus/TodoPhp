@@ -668,18 +668,23 @@ function move_options(string $currentGroup, array $allGroups): string
     /* Group header gloss */
     details.group > summary:hover { background: rgba(255,255,255,.5); }
 
+    /* Add form + stats side by side, equal width */
+    .top-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 1rem; margin-bottom: 1.5rem; }
+    .top-row > .add-form { flex: 1 1 0; min-width: 280px; margin-bottom: 0; }
+    .top-row > .stats { flex: 1 1 0; min-width: 280px; margin-bottom: 0; }
+
     /* Overall completion stat panel */
     .stats {
         display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1.1rem;
-        margin-bottom: 1rem; padding: .7rem 1rem; border-radius: 8px;
+        padding: .7rem 1rem; border-radius: 6px;
         background: linear-gradient(180deg, #ffffff, #eef1f7);
         border: 1px solid #c2cad7;
         box-shadow: 0 3px 7px rgba(28,42,66,.18), inset 0 1px 0 rgba(255,255,255,.9);
     }
     .stat-figure { display: flex; align-items: baseline; gap: .4rem; }
-    .stat-pct { font-size: 1.6rem; font-weight: 700; color: #2560c8; text-shadow: 0 1px 0 rgba(255,255,255,.8); }
+    .stat-pct { font-size: 1.9rem; font-weight: 700; color: #2560c8; text-shadow: 0 1px 0 rgba(255,255,255,.8); }
     .stat-label { font-size: .8rem; color: #667; }
-    .stat-bar { flex: 1 1 220px; height: 12px; min-width: 160px; }
+    .stat-bar { flex: 1 1 100%; height: 14px; }
     .stat-meta { font-size: .82rem; color: #778; }
 </style>
 </head>
@@ -718,20 +723,38 @@ function move_options(string $currentGroup, array $allGroups): string
     </div>
 </div>
 
-<!-- Add form -->
-<form class="add-form" method="post" action="">
-    <input type="hidden" name="action" value="add">
-    <label>Task
-        <input type="text" name="task" required>
-    </label>
-    <label>Group
-        <input type="text" name="group" list="group-list" placeholder="(optional)" value="<?= e($addGroup) ?>">
-    </label>
-    <label>Status
-        <select name="status"><?= status_options($addStatus) ?></select>
-    </label>
-    <button class="primary" type="submit">Add item</button>
-</form>
+<div class="top-row">
+    <!-- Add form -->
+    <form class="add-form" method="post" action="">
+        <input type="hidden" name="action" value="add">
+        <label>Task
+            <input type="text" name="task" required>
+        </label>
+        <label>Group
+            <input type="text" name="group" list="group-list" placeholder="(optional)" value="<?= e($addGroup) ?>">
+        </label>
+        <label>Status
+            <select name="status"><?= status_options($addStatus) ?></select>
+        </label>
+        <button class="primary" type="submit">Add item</button>
+    </form>
+
+    <?php if (!empty($items)): ?>
+    <!-- Overall completion stats -->
+    <div class="stats">
+        <div class="stat-figure">
+            <span class="stat-pct"><?= $overall ?>%</span>
+            <span class="stat-label">overall completion</span>
+        </div>
+        <div class="stat-bar bar"><span style="width: <?= $overall ?>%;"></span></div>
+        <div class="stat-meta">
+            <?= $countedN ?> task<?= $countedN === 1 ? '' : 's' ?>
+            · <?= $doneN ?> done
+            <?php if ($skippedN > 0): ?>· <?= $skippedN ?> skipped (excluded)<?php endif; ?>
+        </div>
+    </div>
+    <?php endif; ?>
+</div>
 
 <!-- Autocomplete list of existing group names (used by add + move) -->
 <datalist id="group-list">
@@ -743,19 +766,6 @@ function move_options(string $currentGroup, array $allGroups): string
 <?php if (empty($items)): ?>
     <p class="empty">No items yet. Add your first one above.</p>
 <?php else: ?>
-
-<div class="stats">
-    <div class="stat-figure">
-        <span class="stat-pct"><?= $overall ?>%</span>
-        <span class="stat-label">overall completion</span>
-    </div>
-    <div class="stat-bar bar"><span style="width: <?= $overall ?>%;"></span></div>
-    <div class="stat-meta">
-        <?= $countedN ?> task<?= $countedN === 1 ? '' : 's' ?>
-        · <?= $doneN ?> done
-        <?php if ($skippedN > 0): ?>· <?= $skippedN ?> skipped (excluded)<?php endif; ?>
-    </div>
-</div>
 
 <div class="toolbar">
     <button type="button" id="expand-all">Expand all</button>
