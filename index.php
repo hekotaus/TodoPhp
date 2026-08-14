@@ -173,6 +173,43 @@ function save_data(string $name, array $items): void
     file_put_contents(DATA_FILE, $json, LOCK_EX);
 }
 
+/**
+ * Normalize decoded JSON (from an uploaded file) into the canonical
+ * ['name' => ..., 'items' => [...]] shape, sanitizing each item. Accepts both
+ * the current object format and the legacy bare-array-of-items format.
+ * Returns null if the input isn't a usable structure.
+ */
+function normalize_uploaded($data): ?array
+{
+    if (!is_array($data)) {
+        return null;
+    }
+    if (array_is_list($data)) {
+        $name  = DEFAULT_LIST_NAME;
+        $items = $data;
+    } else {
+        $name  = (isset($data['name']) && is_string($data['name']) && trim($data['name']) !== '')
+            ? $data['name'] : DEFAULT_LIST_NAME;
+        $items = (isset($data['items']) && is_array($data['items'])) ? $data['items'] : [];
+    }
+    $clean = [];
+    foreach ($items as $it) {
+        if (!is_array($it)) {
+            continue;
+        }
+        $task = isset($it['task']) && is_string($it['task']) ? $it['task']
+              : (isset($it['name']) && is_string($it['name']) ? $it['name'] : '');
+        $clean[] = [
+            'id'         => (isset($it['id']) && is_string($it['id']) && $it['id'] !== '') ? $it['id'] : new_id(),
+            'task'       => trim($task),
+            'status'     => clean_status($it['status'] ?? null),
+            'completion' => clean_completion($it['completion'] ?? 0),
+            'group'      => clean_group($it['group'] ?? ''),
+        ];
+    }
+    return ['name' => $name, 'items' => $clean];
+}
+
 /** Coerce a status string to a valid value, defaulting to PENDING. */
 function clean_status(?string $status): string
 {
@@ -380,6 +417,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             setcookie('todo_file', $fname, ['path' => '/', 'samesite' => 'Lax']);
             $activeFile = $fname;
         }
+    } elseif ($action === 'upload') {
+        // Import a JSON data file from the user's computer, save it into the
+        // app folder under its (sanitized) name, and switch to it.
+        $up = $_FILES['datafile'] ?? null;
+        if (is_array($up) && ($up['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_OK
+            && is_uploaded_file($up['tmp_name'] ?? '') && ($up['size'] ?? 0) <= 5 * 1024 * 1024) {
+            $fname = safe_data_filename($up['name'] ?? '');
+            $raw   = (string) file_get_contents($up['tmp_name']);
+            $norm  = normalize_uploaded(json_decode($raw, true));
+            if ($fname !== null && $norm !== null) {
+                $json = json_encode($norm, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                file_put_contents(DATA_DIR . DIRECTORY_SEPARATOR . $fname, $json, LOCK_EX);
+                setcookie('todo_file', $fname, ['path' => '/', 'samesite' => 'Lax']);
+                $activeFile = $fname;
+            }
+        }
     } elseif ($action === 'delete_file') {
         // Delete a data file and switch to another (or back to the default).
         $fname = safe_data_filename($_POST['file'] ?? '');
@@ -501,6 +554,8 @@ function move_options(string $currentGroup, array $allGroups): string
     .file-form { display: inline-flex; align-items: center; gap: .5rem; }
     .file-del-form { margin: 0; }
     .file-new { font-size: .82rem; padding: .3rem .6rem; }
+    .file-up-form { margin: 0; }
+    .file-up { font-size: .82rem; padding: .3rem .6rem; }
     .file-del { font-size: .82rem; padding: .3rem .6rem; color: #c0392b; border-color: #e3b6b1; background: #fff; }
     .file-del:hover { background: #fdecea; }
     .file-dl { display: inline-block; text-decoration: none; font-size: .82rem; padding: .3rem .6rem;
@@ -733,6 +788,15 @@ function move_options(string $currentGroup, array $allGroups): string
                 </select>
             </label>
             <button type="button" class="file-new" onclick="newFile(this)">New file</button>
+        </form>
+
+        <!-- Upload a data file from the user's computer -->
+        <form method="post" action="" class="file-up-form" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload">
+            <input type="file" name="datafile" id="upload-input" accept=".json,application/json"
+                   style="display:none" onchange="this.form.submit()">
+            <button type="button" class="file-up"
+                    onclick="document.getElementById('upload-input').click()">Upload</button>
         </form>
 
         <!-- Download the current data file -->

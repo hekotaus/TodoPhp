@@ -89,8 +89,10 @@ two ways to use a different file:
 - **The Data file dropdown** in the top-right corner lists the `.json` files in
   the app folder and lets you switch between them without restarting the
   server. The **New file** button beside it prompts for a name and creates an
-  empty list, switching to it. The **Download** button saves a copy of the
-  current data file to your computer. The **Delete file** button permanently
+  empty list, switching to it. The **Upload** button imports a JSON data file
+  from your computer (saved into the app folder under its name and switched to;
+  contents are validated and normalized). The **Download** button saves a copy
+  of the current data file to your computer. The **Delete file** button permanently
   removes the current file (after a confirmation) and switches to another file,
   or back to `todo.json` if none remain.
 - **A URL parameter** — open `index.php?file=work.json` (any name) to load that
