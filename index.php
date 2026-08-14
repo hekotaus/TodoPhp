@@ -482,9 +482,18 @@ function move_options(string $currentGroup, array $allGroups): string
     .list-title { font-size: 1.5rem; font-weight: 700; color: #222; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: .1rem .3rem; margin-left: -.3rem; width: 100%; max-width: 640px; font-family: inherit; }
     .list-title:hover { border-color: #e0e0e0; }
     .list-title:focus { border-color: #2d6cdf; background: #fff; outline: none; }
-    .toolbar { display: flex; gap: 1rem; margin-bottom: 1rem; font-size: .8rem; }
+    .toolbar { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; font-size: .8rem; }
     .toolbar button { background: none; border: none; color: #2d6cdf; padding: 0; cursor: pointer; font-size: .8rem; }
     .toolbar button:hover { text-decoration: underline; }
+    /* Latching filter button */
+    .toolbar button.toggle { margin-left: auto; border: 1px solid #bbb; border-radius: 4px; padding: .25rem .6rem; color: #444; }
+    .toolbar button.toggle:hover { text-decoration: none; background: #f0f0f0; }
+    .toolbar button.toggle.pressed { background: #2d6cdf; border-color: #2d6cdf; color: #fff; }
+    .toolbar button.toggle.pressed:hover { background: #245ac0; }
+
+    /* "Undone only" filter: hide completed / skipped rows. */
+    body.undone-only tr[data-status="DONE"],
+    body.undone-only tr[data-status="SKIPPED"] { display: none; }
 
     .add-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
     .add-form label { display: flex; flex-direction: column; font-size: .8rem; color: #555; gap: .2rem; }
@@ -619,6 +628,8 @@ function move_options(string $currentGroup, array $allGroups): string
 <div class="toolbar">
     <button type="button" id="expand-all">Expand all</button>
     <button type="button" id="collapse-all">Collapse all</button>
+    <button type="button" id="undone-only" class="toggle" aria-pressed="false"
+            title="Hide DONE and SKIPPED items">Undone only</button>
 </div>
 
 <div class="groups">
@@ -655,7 +666,7 @@ function move_options(string $currentGroup, array $allGroups): string
                 </thead>
                 <tbody>
                 <?php foreach ($groupItems as $it): ?>
-                    <tr class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
+                    <tr data-status="<?= e($it['status']) ?>" class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
                         <!-- Task: inline edit, submits on blur/Enter -->
                         <td>
                             <form class="inline" method="post" action="" style="display:block;">
@@ -775,6 +786,40 @@ function resetRowControls() {
 }
 resetRowControls();
 window.addEventListener('pageshow', resetRowControls);
+
+// Latching "Undone only" filter: hide DONE/SKIPPED rows and any group left
+// empty by the filter. State persists (per browser) across reloads.
+(function () {
+    var KEY = 'todo-undone-only';
+    var btn = document.getElementById('undone-only');
+    if (!btn) return;
+
+    function apply(on) {
+        document.body.classList.toggle('undone-only', on);
+        btn.classList.toggle('pressed', on);
+        btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        // Hide groups that have no remaining (non-DONE/SKIPPED) items.
+        document.querySelectorAll('details.group').forEach(function (d) {
+            if (!on) { d.style.display = ''; return; }
+            var visible = 0;
+            d.querySelectorAll('tbody tr').forEach(function (r) {
+                var s = r.getAttribute('data-status');
+                if (s !== 'DONE' && s !== 'SKIPPED') visible++;
+            });
+            d.style.display = visible ? '' : 'none';
+        });
+    }
+
+    var on = false;
+    try { on = localStorage.getItem(KEY) === '1'; } catch (e) {}
+    apply(on);
+
+    btn.addEventListener('click', function () {
+        on = !document.body.classList.contains('undone-only');
+        try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {}
+        apply(on);
+    });
+})();
 
 (function () {
     // Remember which groups are collapsed, per browser.

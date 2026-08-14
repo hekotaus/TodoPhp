@@ -33,6 +33,11 @@ Items sharing
 the same status keep the order they were added in, and changing an item's
 status re-sorts it into place.
 
+The **Undone only** button in the toolbar is a latching filter: press it to
+hide all DONE and SKIPPED items (any group left with nothing to show is hidden
+too), and press it again to show everything. Its state is remembered per
+browser and survives reloads.
+
 On a wide browser window the group cards flow into two or more columns to make
 use of the space; on a narrow window they stack into a single column. Each card
 always stays whole — a group is never split across two columns.
