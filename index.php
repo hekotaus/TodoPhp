@@ -831,7 +831,8 @@ function move_options(string $currentGroup, array $allGroups): string
             <input type="text" name="task" required>
         </label>
         <label>Group
-            <input type="text" name="group" list="group-list" placeholder="(optional)" value="<?= e($addGroup) ?>">
+            <input type="text" name="group" list="group-list" placeholder="(optional)"
+                   autocomplete="off" value="<?= e($addGroup) ?>">
         </label>
         <label>Status
             <select name="status"><?= status_options($addStatus) ?></select>
