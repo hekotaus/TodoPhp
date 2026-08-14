@@ -80,6 +80,20 @@ if (($_GET['poll'] ?? '') === '1') {
     exit;
 }
 
+// Download endpoint: serve the current data file as a file attachment.
+if (($_GET['download'] ?? '') === '1') {
+    $dlName    = basename(DATA_FILE);
+    $dlContent = is_file(DATA_FILE)
+        ? (string) file_get_contents(DATA_FILE)
+        : "{\n    \"name\": \"Todo List\",\n    \"items\": []\n}";
+    header('Content-Type: application/json; charset=utf-8');
+    header('Content-Disposition: attachment; filename="' . $dlName . '"');
+    header('Content-Length: ' . strlen($dlContent));
+    header('Cache-Control: no-store');
+    echo $dlContent;
+    exit;
+}
+
 const STATUSES = ['PENDING', 'PROGRESS', 'DEPENDING', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
 
 /** Display order of statuses within a group (lower = shown first). */
@@ -489,6 +503,13 @@ function move_options(string $currentGroup, array $allGroups): string
     .file-new { font-size: .82rem; padding: .3rem .6rem; }
     .file-del { font-size: .82rem; padding: .3rem .6rem; color: #c0392b; border-color: #e3b6b1; background: #fff; }
     .file-del:hover { background: #fdecea; }
+    .file-dl { display: inline-block; text-decoration: none; font-size: .82rem; padding: .3rem .6rem;
+               color: #256b34; background: linear-gradient(180deg, #ffffff, #e2efe4);
+               border: 1px solid #a9c6b0; border-radius: 6px; cursor: pointer; line-height: normal;
+               box-shadow: 0 2px 3px rgba(28,66,42,.2), inset 0 1px 0 rgba(255,255,255,.85);
+               text-shadow: 0 1px 0 rgba(255,255,255,.6); }
+    .file-dl:hover { background: linear-gradient(180deg, #ffffff, #d3e8d8); }
+    .file-dl:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(20,40,25,.25); }
     .list-title { font-size: 1.5rem; font-weight: 700; color: #222; border: 1px solid transparent; background: transparent; border-radius: 5px; padding: .1rem .3rem; margin-left: -.3rem; width: 100%; max-width: 640px; font-family: inherit; }
     .list-title:hover { border-color: #e0e0e0; }
     .list-title:focus { border-color: #2d6cdf; background: #fff; outline: none; }
@@ -713,6 +734,10 @@ function move_options(string $currentGroup, array $allGroups): string
             </label>
             <button type="button" class="file-new" onclick="newFile(this)">New file</button>
         </form>
+
+        <!-- Download the current data file -->
+        <a class="file-dl" href="?download=1&amp;file=<?= rawurlencode($currentFile) ?>"
+           download="<?= e($currentFile) ?>" title="Download this data file">Download</a>
 
         <!-- Delete the current data file -->
         <form method="post" action="" class="file-del-form"
