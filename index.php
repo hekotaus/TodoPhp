@@ -94,6 +94,16 @@ if (($_GET['download'] ?? '') === '1') {
     exit;
 }
 
+// Pin the page URL to the active file. Without an explicit ?file=, this tab's
+// forms (action="") would post with no file and fall back to the shared cookie
+// — which another tab may have changed — so edits could land in the wrong file.
+// Redirecting bare page loads to ?file=<current> keeps each tab bound to its
+// own file regardless of what other tabs do with the cookie.
+if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['file'])) {
+    header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?file=' . rawurlencode(basename(DATA_FILE)));
+    exit;
+}
+
 const STATUSES = ['PENDING', 'PROGRESS', 'DEPENDING', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
 
 /** Display order of statuses within a group (lower = shown first). */
