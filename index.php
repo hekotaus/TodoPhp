@@ -755,6 +755,10 @@ function move_options(string $currentGroup, array $allGroups): string
     /* Group header gloss */
     details.group > summary:hover { background: rgba(255,255,255,.5); }
 
+    /* Group summary completion — longer bar, bigger, higher-contrast % */
+    summary .gbar .bar.sm { width: 150px; height: 11px; }
+    summary .gbar .count { font-size: 1rem; font-weight: 700; color: #1d4ed8; text-shadow: 0 1px 0 rgba(255,255,255,.75); }
+
     /* Add form + stats side by side, equal width */
     .top-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 1rem; margin-bottom: 1.5rem; }
     .top-row > .add-form { flex: 1 1 0; min-width: 280px; margin-bottom: 0; }
