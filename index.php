@@ -562,6 +562,102 @@ function move_options(string $currentGroup, array $allGroups): string
     .colw-status { width: 104px; }
     .colw-comp { width: 150px; }
     .colw-act { width: 185px; }
+
+    /* ============================================================
+       3D THEME — depth via gradients, bevels and drop shadows.
+       Appended last so it layers over the base styles above.
+       ============================================================ */
+    body { background: linear-gradient(180deg, #eef1f6, #dde3ec); background-attachment: fixed; }
+
+    /* Raised panels */
+    .add-form, details.group {
+        background: linear-gradient(180deg, #ffffff, #eef1f7);
+        border: 1px solid #c2cad7;
+        box-shadow: 0 3px 7px rgba(28,42,66,.18), inset 0 1px 0 rgba(255,255,255,.9);
+    }
+
+    /* Sunken fields */
+    input[type=text], input[type=number], select, #file-select, .move-select {
+        border: 1px solid #b0b9c8;
+        background: linear-gradient(180deg, #eef1f5, #ffffff 55%);
+        box-shadow: inset 0 2px 3px rgba(20,30,50,.16);
+    }
+    .edit-name { box-shadow: none; background: transparent; }
+    .edit-name:hover { box-shadow: inset 0 1px 2px rgba(20,30,50,.12); }
+    .edit-name:focus, .list-title:focus {
+        background: linear-gradient(180deg, #f2f6ff, #ffffff 60%);
+        box-shadow: inset 0 2px 3px rgba(20,30,50,.18);
+    }
+
+    /* Raised buttons */
+    button {
+        background: linear-gradient(180deg, #ffffff, #dfe4ee);
+        border: 1px solid #a7b1c1;
+        border-radius: 6px;
+        box-shadow: 0 2px 3px rgba(28,42,66,.22), inset 0 1px 0 rgba(255,255,255,.85);
+        text-shadow: 0 1px 0 rgba(255,255,255,.6);
+    }
+    button:hover { background: linear-gradient(180deg, #ffffff, #d4dbe6); }
+    button:active { transform: translateY(1px); box-shadow: 0 1px 1px rgba(28,42,66,.25), inset 0 2px 4px rgba(20,30,50,.28); }
+
+    button.primary {
+        background: linear-gradient(180deg, #5a90ec, #2560c8);
+        border-color: #1f4fa8; color: #fff;
+        text-shadow: 0 -1px 0 rgba(0,0,0,.28);
+        box-shadow: 0 2px 4px rgba(24,60,130,.4), inset 0 1px 0 rgba(255,255,255,.4);
+    }
+    button.primary:hover { background: linear-gradient(180deg, #6a9cf0, #2a68d2); }
+
+    button.del, .file-del {
+        background: linear-gradient(180deg, #ffffff, #fbe4e1);
+        border-color: #dda6a0; color: #c0392b;
+        box-shadow: 0 2px 3px rgba(120,30,30,.2), inset 0 1px 0 rgba(255,255,255,.8);
+        text-shadow: 0 1px 0 rgba(255,255,255,.5);
+    }
+    button.del:hover, .file-del:hover { background: linear-gradient(180deg, #ffffff, #f7d2cd); }
+
+    /* Status chips — beveled pills */
+    select.status {
+        border: 1px solid rgba(0,0,0,.18);
+        box-shadow: 0 1px 2px rgba(28,42,66,.3), inset 0 1px 0 rgba(255,255,255,.4);
+    }
+
+    /* Progress bar — sunken track, glossy fill */
+    .bar {
+        background: linear-gradient(180deg, #d5dae3, #e7ebf1);
+        box-shadow: inset 0 1px 2px rgba(20,30,50,.35);
+        height: 9px; border: none;
+    }
+    .bar.sm { height: 8px; }
+    .bar > span {
+        background: linear-gradient(180deg, #6098f4, #2d6cdf);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
+    }
+
+    /* Toolbar buttons — small raised pills */
+    .toolbar button {
+        background: linear-gradient(180deg, #ffffff, #e2e7ef);
+        border: 1px solid #aab3c2; border-radius: 6px;
+        color: #2d6cdf; padding: .28rem .6rem;
+        box-shadow: 0 2px 3px rgba(28,42,66,.2), inset 0 1px 0 rgba(255,255,255,.85);
+        text-shadow: 0 1px 0 rgba(255,255,255,.7);
+    }
+    .toolbar button:hover { text-decoration: none; background: linear-gradient(180deg, #ffffff, #d6dce6); }
+    .toolbar button:active { transform: translateY(1px); box-shadow: inset 0 2px 4px rgba(20,30,50,.28); }
+    .toolbar button.toggle {
+        background: linear-gradient(180deg, #ffffff, #e2e7ef);
+        box-shadow: 0 2px 3px rgba(28,42,66,.2), inset 0 1px 0 rgba(255,255,255,.85);
+    }
+    .toolbar button.toggle.pressed {
+        background: linear-gradient(180deg, #2560c8, #4d84e6);
+        border-color: #1f4fa8; color: #fff;
+        box-shadow: inset 0 2px 5px rgba(0,0,0,.4);
+        transform: translateY(1px);
+        text-shadow: 0 -1px 0 rgba(0,0,0,.3);
+    }
+
+    /* Group header gloss */
+    details.group > summary:hover { background: rgba(255,255,255,.5); }
 </style>
 </head>
 <body>
