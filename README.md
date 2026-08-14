@@ -33,6 +33,10 @@ Items sharing
 the same status keep the order they were added in, and changing an item's
 status re-sorts it into place.
 
+A panel above the list shows **overall completion** — the average completion
+across all tasks, with a count of how many are done. SKIPPED items are excluded
+from both the average and the task count (and noted separately).
+
 The **Undone only** button in the toolbar is a latching filter: press it to
 hide all DONE and SKIPPED items (any group left with nothing to show is hidden
 too), and press it again to show everything. Its state is remembered per

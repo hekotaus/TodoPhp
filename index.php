@@ -407,6 +407,15 @@ $buckets  = group_items($items);
 $addGroup  = clean_group($_COOKIE['add_group'] ?? '');
 $addStatus = clean_status($_COOKIE['add_status'] ?? 'PENDING');
 
+// Overall completion stats — SKIPPED items are excluded from the calculation.
+$counted  = array_values(array_filter($items, static fn($i) => ($i['status'] ?? '') !== 'SKIPPED'));
+$countedN = count($counted);
+$skippedN = count($items) - $countedN;
+$overall  = $countedN
+    ? (int) round(array_sum(array_map(static fn($i) => (int) $i['completion'], $counted)) / $countedN)
+    : 0;
+$doneN    = count(array_filter($counted, static fn($i) => (int) $i['completion'] === 100));
+
 // Data-file change signature at render time, for the auto-refresh poll.
 $fileSig = file_signature();
 
@@ -658,6 +667,20 @@ function move_options(string $currentGroup, array $allGroups): string
 
     /* Group header gloss */
     details.group > summary:hover { background: rgba(255,255,255,.5); }
+
+    /* Overall completion stat panel */
+    .stats {
+        display: flex; align-items: center; flex-wrap: wrap; gap: .6rem 1.1rem;
+        margin-bottom: 1rem; padding: .7rem 1rem; border-radius: 8px;
+        background: linear-gradient(180deg, #ffffff, #eef1f7);
+        border: 1px solid #c2cad7;
+        box-shadow: 0 3px 7px rgba(28,42,66,.18), inset 0 1px 0 rgba(255,255,255,.9);
+    }
+    .stat-figure { display: flex; align-items: baseline; gap: .4rem; }
+    .stat-pct { font-size: 1.6rem; font-weight: 700; color: #2560c8; text-shadow: 0 1px 0 rgba(255,255,255,.8); }
+    .stat-label { font-size: .8rem; color: #667; }
+    .stat-bar { flex: 1 1 220px; height: 12px; min-width: 160px; }
+    .stat-meta { font-size: .82rem; color: #778; }
 </style>
 </head>
 <body>
@@ -720,6 +743,19 @@ function move_options(string $currentGroup, array $allGroups): string
 <?php if (empty($items)): ?>
     <p class="empty">No items yet. Add your first one above.</p>
 <?php else: ?>
+
+<div class="stats">
+    <div class="stat-figure">
+        <span class="stat-pct"><?= $overall ?>%</span>
+        <span class="stat-label">overall completion</span>
+    </div>
+    <div class="stat-bar bar"><span style="width: <?= $overall ?>%;"></span></div>
+    <div class="stat-meta">
+        <?= $countedN ?> task<?= $countedN === 1 ? '' : 's' ?>
+        · <?= $doneN ?> done
+        <?php if ($skippedN > 0): ?>· <?= $skippedN ?> skipped (excluded)<?php endif; ?>
+    </div>
+</div>
 
 <div class="toolbar">
     <button type="button" id="expand-all">Expand all</button>
