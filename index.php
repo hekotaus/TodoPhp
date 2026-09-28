@@ -696,6 +696,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $archived[] = $group;
         }
         save_data($listName, $items, $archived, $timezone);
+    } elseif ($action === 'set_timezone') {
+        // Change the timezone this list is kept in. The rest of this request
+        // works in the new one, so the due-date window below uses it too.
+        $picked = clean_timezone($_POST['value'] ?? '');
+        if ($picked !== '') {
+            $timezone = $picked;
+            apply_timezone($timezone);
+            save_data($listName, $items, $archived, $timezone);
+        }
     } elseif ($action === 'rename_list') {
         // Rename the whole todo list.
         $listName = trim((string) ($_POST['value'] ?? ''));
@@ -763,7 +772,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // alone may have done the same to others, so the rule runs over the list
     // before the answer goes out. File actions are left alone: $items there
     // belongs to the file being switched away from.
-    if (in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived'], true)
+    if (in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived', 'set_timezone'], true)
         && promote_due_soon($items)) {
         save_data($listName, $items, $archived, $timezone);
     }
@@ -775,7 +784,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // list actions qualify; the file actions change which file is shown and
     // still go through a normal submit and full load.
     if (($_POST['ajax'] ?? '') === '1'
-        && in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived'], true)) {
+        && in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived', 'set_timezone'], true)) {
         header('Content-Type: application/json');
         header('Cache-Control: no-store');
         echo json_encode([
@@ -834,6 +843,32 @@ $jsonFiles = array_values($jsonFiles);
 function e(string $s): string
 {
     return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * The timezone <select>, grouped by region so the list is navigable, with
+ * $current pre-selected.
+ */
+function timezone_options(string $current): string
+{
+    $regions = [];
+    foreach (DateTimeZone::listIdentifiers() as $id) {
+        $cut    = strpos($id, '/');
+        $region = $cut === false ? 'Other' : substr($id, 0, $cut);
+        // The whole name, so the closed select still says which region it is;
+        // the groups are there to make the open list navigable.
+        $regions[$region][$id] = str_replace('_', ' ', $id);
+    }
+    $out = '';
+    foreach ($regions as $region => $ids) {
+        $out .= '<optgroup label="' . e($region) . '">';
+        foreach ($ids as $id => $label) {
+            $sel = $id === $current ? ' selected' : '';
+            $out .= '<option value="' . e($id) . '"' . $sel . '>' . e($label) . '</option>';
+        }
+        $out .= '</optgroup>';
+    }
+    return $out;
 }
 
 /** Render the shared status <select>; $current is pre-selected. */
@@ -1544,6 +1579,17 @@ function render_list(array $items, array $archived = []): string
             <button type="button" class="file-new" onclick="newFile(this)">New file</button>
         </form>
 
+        <!-- Timezone this list is kept in; stored in the data file -->
+        <form method="post" action="" class="file-form">
+            <input type="hidden" name="action" value="set_timezone">
+            <label class="file-label">Timezone:
+                <select id="tz-select" name="value" title="The timezone this list's dates are in"
+                        onchange="submitList(this.form)">
+                    <?= timezone_options(date_default_timezone_get()) ?>
+                </select>
+            </label>
+        </form>
+
         <!-- Upload a data file from the user's computer -->
         <form method="post" action="" class="file-up-form" enctype="multipart/form-data">
             <input type="hidden" name="action" value="upload">
@@ -1627,7 +1673,7 @@ function render_list(array $items, array $archived = []): string
 
 // Actions that only change list contents, and so can be applied in place. File
 // actions (select / upload / delete file) submit normally and reload the page.
-var LIST_ACTIONS = ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived'];
+var LIST_ACTIONS = ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived', 'set_timezone'];
 
 // Signature of the data file as the page currently shows it, and the file the
 // page is bound to. Both are kept current by applyUpdate().

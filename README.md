@@ -120,7 +120,12 @@ top of `index.php`, and records it the first time it is saved, so every list
 ends up saying what its dates mean. PHP otherwise falls back to UTC, which
 would put the five-day window hours behind the people using the list. The
 timezone also decides the offset written into the added and completed
-timestamps; edit the line in the file (or the constant) to change it.
+timestamps.
+
+Pick it from the **Timezone** dropdown at the top of the page, next to the
+data file selector: the choice is saved into that file straight away, and the
+rest of the page — the due-date window included — works in it from that moment
+on. The list is grouped by region, and an unrecognised value is ignored.
 
 Click a due date in the list to change it, the same as any other field: the
 cell is a date field that reads as plain text until you point at it, and it
