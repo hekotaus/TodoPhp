@@ -5,7 +5,10 @@ declare(strict_types=1);
  * Simple PHP Todo List
  * ---------------------
  * Storage: a flat JSON file (data.json) sitting next to this script.
- * Each item has: id, name, status, completion (0-100), group.
+ * Each item has: id, task, status, completion (0-100), group, and the dates it
+ * was added and completed. The added date is shown while an item is still
+ * outstanding and the completion date once it is DONE, under a "Show dates"
+ * tick box in the toolbar.
  *
  * The list is shown as a collapsible tree: each group is a section you can
  * fold/unfold, and item fields (task, status, completion, group) are edited
@@ -124,6 +127,14 @@ const OPEN_STATUSES = ['URGENT', 'PROGRESS', 'UNDONE', 'DEPENDANT', 'PENDING'];
 /** Label used for items that have no group assigned. */
 const UNGROUPED = 'Ungrouped';
 
+/**
+ * How the "added" and "completed" timestamps are stored: ISO-8601 with the UTC
+ * offset, e.g. 2026-09-28T10:21:00+09:30. PHP's built-in server runs in UTC
+ * unless php.ini says otherwise, so the offset is what lets the browser show
+ * each date in the reader's own timezone instead of being a day out.
+ */
+const DATE_FORMAT = 'c';
+
 /** Fields that may be updated inline. */
 const EDITABLE_FIELDS = ['task', 'status', 'completion', 'group'];
 
@@ -174,6 +185,9 @@ function load_data(): array
         if (!isset($item['group']) || !is_string($item['group'])) {
             $item['group'] = '';
         }
+        // Items written before dates were recorded simply have none.
+        $item['added']     = clean_stamp($item['added'] ?? '');
+        $item['completed'] = clean_stamp($item['completed'] ?? '');
     }
     unset($item);
 
@@ -227,6 +241,8 @@ function normalize_uploaded($data): ?array
             'status'     => clean_status($it['status'] ?? null),
             'completion' => clean_completion($it['completion'] ?? 0),
             'group'      => clean_group($it['group'] ?? ''),
+            'added'      => clean_stamp($it['added'] ?? ''),
+            'completed'  => clean_stamp($it['completed'] ?? ''),
         ];
     }
     return ['name' => $name, 'items' => $clean];
@@ -256,6 +272,75 @@ function clean_completion($value): int
 function clean_group($value): string
 {
     return trim((string) $value);
+}
+
+/** Timestamp for right now, in the stored format. */
+function now_stamp(): string
+{
+    return date(DATE_FORMAT);
+}
+
+/**
+ * Accept a stored timestamp, or '' for "no date". Anything that isn't a
+ * readable date is dropped rather than shown back to the user.
+ */
+function clean_stamp($value): string
+{
+    if (!is_string($value)) {
+        return '';
+    }
+    $value = trim($value);
+    if ($value === '' || strlen($value) > 40 || strtotime($value) === false) {
+        return '';
+    }
+    return $value;
+}
+
+/**
+ * Keep the completion date in step with the status: stamp it when an item
+ * becomes DONE, clear it when it moves back off DONE, and leave the date of an
+ * item that was already DONE alone.
+ */
+function stamp_done(array $item): array
+{
+    if (($item['status'] ?? '') === 'DONE') {
+        if (clean_stamp($item['completed'] ?? '') === '') {
+            $item['completed'] = now_stamp();
+        }
+    } else {
+        $item['completed'] = '';
+    }
+    return $item;
+}
+
+/**
+ * The date to show for an item, or null for none: when it was added while it
+ * is still outstanding, when it was completed once it is DONE. SKIPPED items
+ * get neither, and items from before dates were recorded have nothing to show.
+ */
+function item_date(array $item): ?array
+{
+    $status = (string) ($item['status'] ?? '');
+    if ($status === 'DONE') {
+        $stamp = clean_stamp($item['completed'] ?? '');
+        $label = 'Completed';
+        $class = 'date-done';
+    } elseif (in_array($status, OPEN_STATUSES, true)) {
+        $stamp = clean_stamp($item['added'] ?? '');
+        $label = 'Added';
+        $class = 'date-added';
+    } else {
+        return null;
+    }
+    if ($stamp === '') {
+        return null;
+    }
+    return [
+        'label' => $label,
+        'class' => $class,
+        'stamp' => $stamp,
+        'short' => substr($stamp, 0, 10),   // the date, without the time
+    ];
 }
 
 /** Generate a reasonably unique id for a new item. */
@@ -352,13 +437,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($task !== '') {
             // New tasks start at 0% — unless added as DONE, which means 100%.
             $completion = $status === 'DONE' ? 100 : 0;
-            $items[] = [
+            $items[] = stamp_done([
                 'id'         => new_id(),
                 'task'       => $task,
                 'status'     => $status,
                 'completion' => $completion,
                 'group'      => $group,
-            ];
+                'added'      => now_stamp(),
+                'completed'  => '',
+            ]);
             save_data($listName, $items);
         }
     } elseif ($action === 'update_field') {
@@ -383,6 +470,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // Reverse: moving off DONE while at 100% drops completion.
                             $item['completion'] = 0;
                         }
+                        $item = stamp_done($item);
                     } elseif ($field === 'completion') {
                         $wasDone = ($item['status'] === 'DONE');
                         $item['completion'] = clean_completion($value);
@@ -393,6 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             // Reverse: dropping below 100% un-marks a DONE item.
                             $item['status'] = 'UNDONE';
                         }
+                        $item = stamp_done($item);
                     } elseif ($field === 'group') {
                         $item['group'] = clean_group($value);
                     }
@@ -657,6 +746,9 @@ function render_list(array $items): string
     <div class="toolbar">
         <button type="button" id="expand-all">Expand all</button>
         <button type="button" id="collapse-all">Collapse all</button>
+        <label class="check" title="Show when each task was added, or when it was completed">
+            <input type="checkbox" id="show-dates"> Show dates
+        </label>
         <button type="button" id="undone-only" class="toggle" aria-pressed="false"
                 title="Hide DONE and SKIPPED items">Undone only</button>
     </div>
@@ -690,6 +782,7 @@ function render_list(array $items): string
                             <th>Task</th>
                             <th class="colw-status">Status</th>
                             <th class="colw-comp">Completion</th>
+                            <th class="colw-date" title="When a task was added, or when it was completed">Date</th>
                             <th class="colw-act"></th>
                         </tr>
                     </thead>
@@ -731,6 +824,15 @@ function render_list(array $items): string
                                     <span class="bar"><span style="width: <?= (int) $it['completion'] ?>%;"></span></span>
                                 </div>
                             </td>
+                            <!-- Date: added while outstanding, completed once DONE -->
+                            <td class="colw-date">
+                                <?php $d = item_date($it); ?>
+                                <?php if ($d !== null): ?>
+                                    <span class="date <?= $d['class'] ?>"
+                                          data-stamp="<?= e($d['stamp']) ?>" data-label="<?= e($d['label']) ?>"
+                                          title="<?= e($d['label'] . ' ' . $d['stamp']) ?>"><?= e($d['short']) ?></span>
+                                <?php endif; ?>
+                            </td>
                             <!-- Actions: move to another group + delete -->
                             <td class="colw-act">
                                 <div class="row-actions">
@@ -771,6 +873,11 @@ function render_list(array $items): string
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= e($listName) ?></title>
 <style>
+    /* A control sized at width:100% has to include its own padding and border,
+       or it hangs over the edge of the cell holding it (the task name and the
+       list title both did). */
+    *, *::before, *::after { box-sizing: border-box; }
+
     body { font-family: system-ui, Arial, sans-serif; max-width: 1720px; margin: 2rem auto; padding: 0 1rem; color: #222; }
     h1 { font-size: 1.5rem; margin-bottom: .5rem; }
     .head-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .5rem; }
@@ -813,7 +920,7 @@ function render_list(array $items): string
     .add-form label { display: flex; flex-direction: column; font-size: .8rem; color: #555; gap: .2rem; }
     input[type=text], input[type=number], select { padding: .4rem; border: 1px solid #bbb; border-radius: 4px; font-size: .9rem; background: #fff; }
     .add-form input[type=text] { min-width: 180px; }
-    .add-form input[name="task"] { min-width: 360px; }
+    .add-form input[name="task"] { min-width: min(360px, 100%); }   /* never wider than the form */
     input[type=number] { width: 68px; }
     button { padding: .45rem .8rem; border: 1px solid #888; border-radius: 4px; background: #eee; cursor: pointer; font-size: .9rem; }
     button:hover { background: #ddd; }
@@ -824,7 +931,10 @@ function render_list(array $items): string
 
     /* Responsive multi-column flow: adds columns as the window widens,
        and never splits a group card across two columns. */
-    .groups { column-width: 840px; column-gap: 1.2rem; }
+    /* Card columns. The width has to fit twice inside the body's content box
+       (1720px max-width, less its 1rem padding on each side) or the list drops
+       back to a single column. */
+    .groups { column-width: 820px; column-gap: 1.2rem; }
 
     /* Collapsible group (tree node) */
     details.group { border: 1px solid #e2e2e2; border-radius: 6px; margin-bottom: .6rem; background: #fff; break-inside: avoid; -webkit-column-break-inside: avoid; page-break-inside: avoid; }
@@ -839,14 +949,14 @@ function render_list(array $items): string
     summary .rename:hover { text-decoration: underline; }
     summary:hover { background: #f7f9ff; }
 
-    .group-body { padding: 0 .35rem .35rem; }
+    .group-body { padding: 0 .35rem .35rem; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; }
     td, th { text-align: left; padding: .12rem .4rem; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
     th { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #aaa; font-weight: 600; }
 
     /* Inline editable name */
-    .edit-name { width: 100%; min-width: 300px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: .18rem .35rem; font-size: .92rem; }
+    .edit-name { width: 100%; min-width: 120px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: .18rem .35rem; font-size: .92rem; }
     .edit-name:hover { border-color: #e0e0e0; }
     .edit-name:focus { border-color: #2d6cdf; background: #fff; outline: none; }
 
@@ -865,17 +975,33 @@ function render_list(array $items): string
     .bar { background: #eee; border-radius: 4px; height: 7px; width: 80px; overflow: hidden; display: inline-block; vertical-align: middle; }
     .bar > span { display: block; height: 100%; background: #2d6cdf; }
     .bar.sm { width: 60px; height: 6px; }
-    .comp-cell { display: flex; align-items: center; gap: .4rem; }
+    /* Completion: the value, with its progress as a thin line underneath. The
+       cell is only as wide as the field, so the line reads as belonging to it. */
+    .comp-cell { display: inline-flex; flex-direction: column; align-items: stretch; gap: .2rem; width: 68px; }
+    .comp-cell .bar { width: 100%; height: 3px; border-radius: 2px; }
     .comp-cell input[type=number] { padding-top: .15rem; padding-bottom: .15rem; }
     .row-actions { display: flex; align-items: center; gap: .35rem; justify-content: flex-end; }
-    .move-select { font-size: .78rem; padding: .12rem .25rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; color: #555; max-width: 110px; cursor: pointer; }
+    .move-select { font-size: .78rem; padding: .12rem .25rem; border: 1px solid #ccc; border-radius: 4px; background: #fff; color: #555; cursor: pointer; }
+    /* Move and Delete share a width, so the two controls line up down the column.
+       76px is what the select needs to show "Move…" next to its arrow; Delete
+       would fit in less, but matching widths matter more than a few pixels. */
+    .row-actions .move-select, .row-actions button.del { width: 76px; }
     button.del { background: #fff; color: #c0392b; border: 1px solid #e3b6b1; border-radius: 4px; padding: .12rem .5rem; font-size: .8rem; }
     button.del:hover { background: #fdecea; }
     .empty { color: #999; font-style: italic; padding: 1rem 0; }
     .muted { color: #999; font-size: .85rem; margin-top: 1rem; }
     .colw-status { width: 104px; }
-    .colw-comp { width: 150px; }
-    .colw-act { width: 185px; }
+    .colw-comp { width: 86px; }
+    .colw-act { width: 150px; }
+
+    /* Date column — present only while "Show dates" is ticked */
+    .colw-date { width: 80px; white-space: nowrap; }
+    th.colw-date, td.colw-date { display: none; }
+    body.show-dates th.colw-date, body.show-dates td.colw-date { display: table-cell; }
+    .date { font-size: .75rem; color: #6a7280; white-space: nowrap; }
+    .date-done { color: #256b34; }
+    .toolbar .check { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; color: #444; }
+    .toolbar .check input { margin: 0; cursor: pointer; }
 
     /* ============================================================
        3D THEME — depth via gradients, bevels and drop shadows.
@@ -943,6 +1069,7 @@ function render_list(array $items): string
         height: 9px; border: none;
     }
     .bar.sm { height: 8px; }
+    .comp-cell .bar { height: 3px; }
     .bar > span {
         background: linear-gradient(180deg, #6098f4, #2d6cdf);
         box-shadow: inset 0 1px 0 rgba(255,255,255,.5);
@@ -1295,6 +1422,34 @@ function initFilter() {
     });
 }
 
+// "Show dates" tick box: reveals the date column (added while a task is still
+// outstanding, completed once it is DONE). Ticked unless the user says
+// otherwise, and the choice persists per browser.
+var DATES_KEY = 'todo-show-dates';
+
+function showDatesOn() {
+    try {
+        var v = localStorage.getItem(DATES_KEY);
+        return v === null ? true : v === '1';
+    } catch (e) { return true; }
+}
+
+function applyShowDates(on) {
+    document.body.classList.toggle('show-dates', on);
+    var box = document.getElementById('show-dates');
+    if (box) { box.checked = on; }
+}
+
+function initDates() {
+    applyShowDates(showDatesOn());
+    var box = document.getElementById('show-dates');
+    if (!box) { return; }
+    box.addEventListener('change', function () {
+        try { localStorage.setItem(DATES_KEY, box.checked ? '1' : '0'); } catch (e) {}
+        applyShowDates(box.checked);
+    });
+}
+
 // Remember which groups are collapsed, per browser.
 var COLLAPSE_KEY = 'todo-collapsed-groups';
 
@@ -1330,12 +1485,31 @@ function initCollapse() {
     if (ca) ca.addEventListener('click', function () { setAll(false); });
 }
 
+// Timestamps are stored as an absolute instant, so show them in whatever
+// timezone the reader is in. Stamps written before the offset was recorded
+// (no trailing Z or +hh:mm) are left exactly as the server rendered them,
+// since their timezone isn't known.
+function localizeDates() {
+    document.querySelectorAll('.date[data-stamp]').forEach(function (el) {
+        var raw = el.getAttribute('data-stamp');
+        if (!/(Z|[+-]\d\d:?\d\d)$/.test(raw)) { return; }
+        var t = new Date(raw);
+        if (isNaN(t.getTime())) { return; }
+        var p = function (n) { return (n < 10 ? '0' : '') + n; };
+        var day = t.getFullYear() + '-' + p(t.getMonth() + 1) + '-' + p(t.getDate());
+        el.textContent = day;
+        el.title = el.getAttribute('data-label') + ' ' + day + ' ' + p(t.getHours()) + ':' + p(t.getMinutes());
+    });
+}
+
 // Run for the page as loaded, and again for every list the server sends back
 // (the swap discards the elements these handlers were attached to).
 function initList() {
     resetRowControls();
     initCollapse();
     initFilter();
+    initDates();
+    localizeDates();
 }
 initList();
 

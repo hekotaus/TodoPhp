@@ -5,7 +5,8 @@ frameworks — items are stored in a flat `todo.json` file next to the script.
 
 Each item has a **task** (its name), a **group**, a **status**, and a
 **completion percentage** (0–100). In the data file this is the `task` key on
-each item.
+each item. Items also carry the date they were added and the date they were
+completed (`added` and `completed`); see *Dates* below.
 
 Valid statuses: `PENDING`, `PROGRESS`, `DEPENDING`, `DONE`, `UNDONE`,
 `URGENT`, `SKIPPED`.
@@ -34,13 +35,32 @@ the same status keep the order they were added in, and changing an item's
 status re-sorts it into place.
 
 A panel above the list shows **overall completion** — the average completion
-across all tasks, with a count of how many are done. SKIPPED items are excluded
-from both the average and the task count (and noted separately).
+across all tasks, with a count of how many are done and how many are still
+uncompleted, broken down by status (URGENT, PROGRESS, UNDONE, DEPENDANT,
+PENDING). SKIPPED items are excluded from the average and the task count, and
+count as neither done nor uncompleted (they are noted separately).
 
 The **Undone only** button in the toolbar is a latching filter: press it to
 hide all DONE and SKIPPED items (any group left with nothing to show is hidden
 too), and press it again to show everything. Its state is remembered per
 browser and survives reloads.
+
+## Dates
+
+Each item records when it was added, and when it was completed. The **Show
+dates** tick box in the toolbar reveals a *Date* column:
+
+- An item that is still uncompleted (URGENT, PROGRESS, UNDONE, DEPENDANT,
+  PENDING) shows the date it was **added**.
+- An item that is DONE shows the date it was **completed**. That date is
+  stamped when the item becomes DONE — by its status, or by its completion
+  reaching 100% — and is cleared if it moves back off DONE.
+- SKIPPED items show neither, and so do items created before the app recorded
+  dates. Nothing is back-filled: an undated item simply shows nothing.
+
+Hovering a date shows the full timestamp. Dates are stored as an absolute
+instant (ISO-8601 with the UTC offset) and displayed in the timezone of
+whoever is reading the page. The tick box is remembered per browser.
 
 On a wide browser window the group cards flow into two or more columns to make
 use of the space; on a narrow window they stack into a single column. Each card
@@ -52,7 +72,8 @@ Everything is edited directly in the row — no separate edit page:
 
 - **Name** — click it and type; it saves when you press Enter or click away.
 - **Status** — pick from the coloured dropdown; saves immediately.
-- **Completion** — type a number (0–100); saves immediately.
+- **Completion** — type a number (0–100); saves immediately. A thin line
+  under the field shows that percentage at a glance.
 - **Move** — the *Move…* dropdown at the end of each row reassigns the item to
   another group. It lists the other existing groups, an *Ungrouped* option, and
   *＋ New group…* (which prompts for a new group name).
