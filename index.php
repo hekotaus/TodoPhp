@@ -990,7 +990,7 @@ function render_list(array $items, array $archived = []): string
             <input type="checkbox" id="show-controls"> Show task controls
         </label>
         <button type="button" id="undone-only" class="toggle" aria-pressed="false"
-                title="Hide DONE and SKIPPED items">Undone only</button>
+                title="Hide DONE and SKIPPED items">Uncompleted only</button>
     </div>
 
     <div class="groups">
@@ -1195,7 +1195,7 @@ function render_list(array $items, array $archived = []): string
     .toolbar button.toggle.pressed { background: #2d6cdf; border-color: #2d6cdf; color: #fff; }
     .toolbar button.toggle.pressed:hover { background: #245ac0; }
 
-    /* "Undone only" filter: hide completed / skipped rows. */
+    /* "Uncompleted only" filter: hide completed / skipped rows. */
     body.undone-only tr[data-status="DONE"],
     body.undone-only tr[data-status="SKIPPED"] { display: none; }
 
@@ -1790,7 +1790,7 @@ function resetRowControls() {
 }
 window.addEventListener('pageshow', resetRowControls);
 
-// Latching "Undone only" filter: hide DONE/SKIPPED rows and any group left
+// Latching "Uncompleted only" filter: hide DONE/SKIPPED rows and any group left
 // empty by the filter. State persists (per browser) across reloads and edits.
 var UNDONE_KEY = 'todo-undone-only';
 

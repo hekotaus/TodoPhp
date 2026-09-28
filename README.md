@@ -65,7 +65,7 @@ uncompleted, broken down by status (URGENT, PROGRESS, UNDONE, DEPENDANT,
 PENDING). SKIPPED items are excluded from the average and the task count, and
 count as neither done nor uncompleted (they are noted separately).
 
-The **Undone only** button in the toolbar is a latching filter: press it to
+The **Uncompleted only** button in the toolbar is a latching filter: press it to
 hide all DONE and SKIPPED items (any group left with nothing to show is hidden
 too), and press it again to show everything. Its state is remembered per
 browser and survives reloads.
@@ -214,7 +214,7 @@ disk.
 - Your own edits never reload the page. Each change is sent in the background,
   written to the data file, and the server sends back the re-rendered list and
   statistics, which replace those parts of the page in place — the file is not
-  read back to do it. Collapse state, the “Undone only” filter and the field you
+  read back to do it. Collapse state, the “Uncompleted only” filter and the field you
   were in are all kept. (Without JavaScript the old submit-and-reload path still
   works.)
 - The page auto-refreshes when the data file changes on disk (edited in another
