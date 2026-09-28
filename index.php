@@ -104,10 +104,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && !isset($_GET['file'])) {
     exit;
 }
 
-const STATUSES = ['PENDING', 'PROGRESS', 'DEPENDING', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
+const STATUSES = ['PENDING', 'PROGRESS', 'DEPENDANT', 'DONE', 'UNDONE', 'URGENT', 'SKIPPED'];
 
 /** Display order of statuses within a group (lower = shown first). */
-const STATUS_ORDER = ['PROGRESS', 'URGENT', 'UNDONE', 'PENDING', 'DEPENDING', 'DONE', 'SKIPPED'];
+const STATUS_ORDER = ['PROGRESS', 'URGENT', 'UNDONE', 'PENDING', 'DEPENDANT', 'DONE', 'SKIPPED'];
+
+/**
+ * Statuses that count as outstanding work, in the order they are shown in the
+ * stats panel breakdown. DONE and SKIPPED are the only statuses left out.
+ */
+const OPEN_STATUSES = ['URGENT', 'PROGRESS', 'UNDONE', 'DEPENDANT', 'PENDING'];
 
 /** Label used for items that have no group assigned. */
 const UNGROUPED = 'Ungrouped';
@@ -494,6 +500,14 @@ $overall  = $countedN
     : 0;
 $doneN    = count(array_filter($counted, static fn($i) => (int) $i['completion'] === 100));
 
+// Outstanding work: every non-DONE, non-SKIPPED item, plus a per-status tally
+// so it is clear what the remaining tasks are waiting on.
+$openByStatus = [];
+foreach (OPEN_STATUSES as $s) {
+    $openByStatus[$s] = count(array_filter($items, static fn($i) => ($i['status'] ?? '') === $s));
+}
+$openN = array_sum($openByStatus);
+
 // Data-file change signature at render time, for the auto-refresh poll.
 $fileSig = file_signature();
 
@@ -635,7 +649,7 @@ function move_options(string $currentGroup, array $allGroups): string
     select.status { font-weight: 600; font-size: .72rem; border-radius: 10px; padding: .1rem .4rem; border: 1px solid transparent; cursor: pointer; }
     select.status.PENDING   { background: #eef; color: #445; }
     select.status.PROGRESS  { background: #d6e4ff; color: #1d4ed8; }
-    select.status.DEPENDING { background: #fef3d6; color: #8a6d1c; }
+    select.status.DEPENDANT { background: #fef3d6; color: #8a6d1c; }
     select.status.DONE      { background: #dff5e1; color: #256b34; }
     select.status.UNDONE    { background: #fde2e0; color: #b02a20; }
     select.status.URGENT    { background: #b02020; color: #fff; }
@@ -777,6 +791,21 @@ function move_options(string $currentGroup, array $allGroups): string
     .stat-label { font-size: .8rem; color: #667; }
     .stat-bar { flex: 1 1 100%; height: 14px; }
     .stat-meta { font-size: .82rem; color: #778; }
+
+    /* Per-status breakdown of the uncompleted tasks */
+    .stat-open { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: .3rem; }
+    .open-chip {
+        font-size: .68rem; font-weight: 600; letter-spacing: .02em;
+        border-radius: 10px; padding: .1rem .45rem;
+        border: 1px solid rgba(0,0,0,.08);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.65);
+    }
+    .open-chip b { font-weight: 700; }
+    .open-chip.PENDING   { background: #eef; color: #445; }
+    .open-chip.PROGRESS  { background: #d6e4ff; color: #1d4ed8; }
+    .open-chip.DEPENDANT { background: #fef3d6; color: #8a6d1c; }
+    .open-chip.UNDONE    { background: #fde2e0; color: #b02a20; }
+    .open-chip.URGENT    { background: #b02020; color: #fff; }
 </style>
 </head>
 <body>
@@ -855,8 +884,18 @@ function move_options(string $currentGroup, array $allGroups): string
         <div class="stat-meta">
             <?= $countedN ?> task<?= $countedN === 1 ? '' : 's' ?>
             · <?= $doneN ?> done
+            · <?= $openN ?> uncompleted
             <?php if ($skippedN > 0): ?>· <?= $skippedN ?> skipped (excluded)<?php endif; ?>
         </div>
+        <?php if ($openN > 0): ?>
+        <div class="stat-open">
+            <?php foreach ($openByStatus as $s => $n): ?>
+                <?php if ($n > 0): ?>
+                    <span class="open-chip <?= e($s) ?>"><?= e($s) ?> <b><?= $n ?></b></span>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
     </div>
     <?php endif; ?>
 </div>
