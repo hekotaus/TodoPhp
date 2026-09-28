@@ -5,8 +5,9 @@ frameworks — items are stored in a flat `todo.json` file next to the script.
 
 Each item has a **task** (its name), a **group**, a **status**, and a
 **completion percentage** (0–100). In the data file this is the `task` key on
-each item. Items also carry the date they were added and the date they were
-completed (`added` and `completed`); see *Dates* below.
+each item. Items also carry free-text **comments** (`comment`) and the date
+they were added and the date they were completed (`added` and `completed`);
+see *Comments* and *Dates* below.
 
 Valid statuses: `PENDING`, `PROGRESS`, `DEPENDING`, `DONE`, `UNDONE`,
 `URGENT`, `SKIPPED`.
@@ -55,6 +56,16 @@ The **Undone only** button in the toolbar is a latching filter: press it to
 hide all DONE and SKIPPED items (any group left with nothing to show is hidden
 too), and press it again to show everything. Its state is remembered per
 browser and survives reloads.
+
+## Comments
+
+The add panel has a multi-line **Comments** field for notes about the task
+being added. A task that carries comments is marked with a small dot in front
+of its name. Hovering a task row shows a tooltip with its full name (handy
+when the column is too narrow for it) and its comments underneath.
+
+Comments are set when the item is added; they survive every later edit, but
+there is no way to change them from the page yet.
 
 ## Dates
 

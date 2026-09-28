@@ -185,6 +185,7 @@ function load_data(): array
         if (!isset($item['group']) || !is_string($item['group'])) {
             $item['group'] = '';
         }
+        $item['comment'] = clean_comment($item['comment'] ?? '');
         // Items written before dates were recorded simply have none.
         $item['added']     = clean_stamp($item['added'] ?? '');
         $item['completed'] = clean_stamp($item['completed'] ?? '');
@@ -241,6 +242,7 @@ function normalize_uploaded($data): ?array
             'status'     => clean_status($it['status'] ?? null),
             'completion' => clean_completion($it['completion'] ?? 0),
             'group'      => clean_group($it['group'] ?? ''),
+            'comment'    => clean_comment($it['comment'] ?? ''),
             'added'      => clean_stamp($it['added'] ?? ''),
             'completed'  => clean_stamp($it['completed'] ?? ''),
         ];
@@ -266,6 +268,20 @@ function clean_completion($value): int
         $n = 100;
     }
     return $n;
+}
+
+/**
+ * Tidy a free-text comment: one newline style, no stray whitespace, and a
+ * ceiling so a pasted document can't bloat the data file.
+ */
+function clean_comment($value): string
+{
+    $value = str_replace(["\r\n", "\r"], "\n", (string) $value);
+    $value = trim($value);
+    if (strlen($value) > 2000) {
+        $value = rtrim(substr($value, 0, 2000));
+    }
+    return $value;
 }
 
 /** Trim a group name (empty means ungrouped). */
@@ -444,9 +460,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $activeFile = basename(DATA_FILE);   // carried into the redirect URL
 
     if ($action === 'add') {
-        $task   = trim((string) ($_POST['task'] ?? ''));
-        $status = clean_status($_POST['status'] ?? null);
-        $group  = clean_group($_POST['group'] ?? '');
+        $task    = trim((string) ($_POST['task'] ?? ''));
+        $status  = clean_status($_POST['status'] ?? null);
+        $group   = clean_group($_POST['group'] ?? '');
+        $comment = clean_comment($_POST['comment'] ?? '');
         // Remember the last-used group and status so the add form keeps them
         // for the next item (handy when adding several to the same group).
         setcookie('add_group', $group, ['path' => '/', 'samesite' => 'Lax']);
@@ -460,6 +477,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'status'     => $status,
                 'completion' => $completion,
                 'group'      => $group,
+                'comment'    => $comment,
                 'added'      => now_stamp(),
                 'completed'  => '',
             ]);
@@ -817,17 +835,32 @@ function render_list(array $items): string
                     </thead>
                     <tbody>
                     <?php foreach ($groupItems as $it): ?>
-                        <tr data-status="<?= e($it['status']) ?>" class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
-                            <!-- Task: inline edit, saves on blur/Enter -->
+                        <?php
+                        // Hover text: the full task name (the column often cuts
+                        // it short), and the comments under it when there are any.
+                        $tip = $it['task'];
+                        if ($it['comment'] !== '') {
+                            $tip .= "\n\n" . $it['comment'];
+                        }
+                        ?>
+                        <tr data-status="<?= e($it['status']) ?>" title="<?= e($tip) ?>"
+                            class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
+                            <!-- Task: inline edit, saves on blur/Enter. The dot
+                                 in front marks an item with comments (hover the
+                                 row to read them); it is always in the markup so
+                                 the names stay lined up. -->
                             <td>
-                                <form class="inline" method="post" action="" style="display:block;">
-                                    <input type="hidden" name="action" value="update_field">
-                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                    <input type="hidden" name="field" value="task">
-                                    <input class="edit-name" name="value" value="<?= e($it['task']) ?>"
-                                           onchange="submitList(this.form)"
-                                           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-                                </form>
+                                <div class="task-cell">
+                                    <span class="note-dot<?= $it['comment'] === '' ? ' none' : '' ?>" aria-hidden="true"></span>
+                                    <form class="inline" method="post" action="" style="display:block;">
+                                        <input type="hidden" name="action" value="update_field">
+                                        <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                        <input type="hidden" name="field" value="task">
+                                        <input class="edit-name" name="value" value="<?= e($it['task']) ?>"
+                                               onchange="submitList(this.form)"
+                                               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                                    </form>
+                                </div>
                             </td>
                             <!-- Status: inline select, saves on change -->
                             <td class="colw-status">
@@ -950,6 +983,11 @@ function render_list(array $items): string
     input[type=text], input[type=number], select { padding: .4rem; border: 1px solid #bbb; border-radius: 4px; font-size: .9rem; background: #fff; }
     .add-form input[type=text] { min-width: 180px; }
     .add-form input[name="task"] { min-width: min(360px, 100%); }   /* never wider than the form */
+    .add-form label.wide { flex: 1 1 100%; }
+    .add-form textarea {
+        font: inherit; font-size: .85rem; resize: vertical; min-height: 2.6rem;
+        padding: .3rem .4rem; border: 1px solid #bbb; border-radius: 4px; background: #fff;
+    }
     input[type=number] { width: 68px; }
     button { padding: .45rem .8rem; border: 1px solid #888; border-radius: 4px; background: #eee; cursor: pointer; font-size: .9rem; }
     button:hover { background: #ddd; }
@@ -994,6 +1032,11 @@ function render_list(array $items): string
     th .sort:hover { text-decoration: underline; }
     th .sort[data-dir="asc"]::after  { content: " \25B2"; font-size: .62rem; }
     th .sort[data-dir="desc"]::after { content: " \25BC"; font-size: .62rem; }
+
+    .task-cell { display: flex; align-items: center; gap: .3rem; }
+    .task-cell > form { flex: 1 1 auto; min-width: 0; }
+    .note-dot { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #5b87d6; }
+    .note-dot.none { background: none; }   /* keeps the names aligned */
 
     /* Inline editable name */
     .edit-name { width: 100%; min-width: 120px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: .18rem .35rem; font-size: .92rem; }
@@ -1248,6 +1291,9 @@ function render_list(array $items): string
         <label>Status
             <select name="status"><?= status_options($addStatus) ?></select>
         </label>
+        <label class="wide">Comments
+            <textarea name="comment" rows="2" placeholder="(optional) notes about this task"></textarea>
+        </label>
         <button class="primary" type="submit">Add item</button>
     </form>
 
@@ -1300,7 +1346,6 @@ function submitList(form) {
     var mine  = ++editSeq;
     var focus = focusKey(document.activeElement);
     var isAdd = formAction(form) === 'add';
-    var taskInput = isAdd ? form.querySelector('input[name="task"]') : null;
 
     fetch(window.location.href, {
         method: 'POST',
@@ -1313,9 +1358,14 @@ function submitList(form) {
             if (!d || !d.ok) { throw new Error('unexpected response'); }
             if (mine !== editSeq) { return; }   // a later edit already repainted
             applyUpdate(d, focus);
-            if (taskInput) {                    // ready for the next item
-                taskInput.value = '';
-                taskInput.focus();
+            if (isAdd) {
+                // Ready for the next item. The group and status are sticky on
+                // purpose; the task and its comments belong to the item just
+                // added, so they are cleared.
+                var task = form.querySelector('input[name="task"]');
+                var note = form.querySelector('textarea[name="comment"]');
+                if (note) { note.value = ''; }
+                if (task) { task.value = ''; task.focus(); }
             }
         })
         .catch(function () {
