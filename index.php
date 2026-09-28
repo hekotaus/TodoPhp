@@ -675,6 +675,18 @@ function move_options(string $currentGroup, array $allGroups): string
 }
 
 /**
+ * A column caption that sorts the panel's rows when clicked. The sorting
+ * itself is done in the browser (see initSort), so it never touches the file
+ * or the order items are stored in.
+ */
+function sort_link(string $key, string $label, string $title = ''): string
+{
+    return '<button type="button" class="sort" data-sort="' . e($key) . '"'
+        . ($title !== '' ? ' title="' . e($title) . '"' : '')
+        . '>' . e($label) . '</button>';
+}
+
+/**
  * Overall figures for the stats panel. SKIPPED items are left out of the
  * completion average; OPEN_STATUSES are tallied as outstanding work.
  */
@@ -796,10 +808,10 @@ function render_list(array $items): string
                 <table>
                     <thead>
                         <tr>
-                            <th>Task</th>
-                            <th class="colw-status">Status</th>
-                            <th class="colw-comp">Completion</th>
-                            <th class="colw-date" title="When a task was added, or when it was completed">Date</th>
+                            <th><?= sort_link('task', 'Task', 'Sort this group by task name') ?></th>
+                            <th class="colw-status"><?= sort_link('status', 'Status', 'Sort this group by status') ?></th>
+                            <th class="colw-comp"><?= sort_link('completion', 'Completion', 'Sort this group by completion') ?></th>
+                            <th class="colw-date"><?= sort_link('date', 'Date', 'Sort this group by date (added, or completed once DONE)') ?></th>
                             <th class="colw-act"></th>
                         </tr>
                     </thead>
@@ -971,6 +983,18 @@ function render_list(array $items): string
     td, th { text-align: left; padding: .12rem .4rem; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
     tr:last-child td { border-bottom: none; }
     th { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #aaa; font-weight: 600; }
+
+    /* Sortable captions. They look like the plain captions they replaced until
+       you point at one, and carry an arrow while their column is the sort. */
+    th .sort {
+        font: inherit; letter-spacing: inherit; text-transform: inherit;
+        color: inherit; background: none; border: none; box-shadow: none;
+        padding: 0; margin: 0; cursor: pointer; white-space: nowrap;
+    }
+    th .sort:hover { color: #2d6cdf; text-decoration: underline; }
+    th .sort.active { color: #2d6cdf; }
+    th .sort[data-dir="asc"]::after  { content: " \25B2"; font-size: .62rem; }
+    th .sort[data-dir="desc"]::after { content: " \25BC"; font-size: .62rem; }
 
     /* Inline editable name */
     .edit-name { width: 100%; min-width: 120px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: .18rem .35rem; font-size: .92rem; }
@@ -1519,6 +1543,94 @@ function localizeDates() {
     });
 }
 
+// Clicking a column caption sorts that panel. A third click comes back to the
+// default, Status, which is the order the server sends: status priority, then
+// the order items were added. The choice is per group and per browser, and is
+// re-applied after every edit, since the server always sends its own order.
+var SORT_KEY = 'todo-sort';
+var DEFAULT_SORT = { key: 'status', dir: 'asc' };
+var STATUS_ORDER = <?= json_encode(STATUS_ORDER) ?>;
+
+function loadSorts() {
+    try { return JSON.parse(localStorage.getItem(SORT_KEY)) || {}; } catch (e) { return {}; }
+}
+
+function saveSorts(all) {
+    try { localStorage.setItem(SORT_KEY, JSON.stringify(all)); } catch (e) {}
+}
+
+// What a row is worth for a given column. '' means "nothing to sort on", and
+// those rows are parked at the end whichever way the column is sorted.
+function rowValue(tr, key) {
+    if (key === 'task') {
+        var n = tr.querySelector('.edit-name');
+        return n ? n.value.trim().toLowerCase() : '';
+    }
+    if (key === 'status') {
+        var i = STATUS_ORDER.indexOf(tr.getAttribute('data-status'));
+        return i < 0 ? STATUS_ORDER.length : i;      // unknown statuses last
+    }
+    if (key === 'completion') {
+        var c = tr.querySelector('input[type=number]');
+        return c ? (parseInt(c.value, 10) || 0) : 0;
+    }
+    if (key === 'date') {
+        var d = tr.querySelector('.date[data-stamp]');
+        var t = d ? Date.parse(d.getAttribute('data-stamp')) : NaN;
+        return isNaN(t) ? '' : t;                    // undated rows last
+    }
+    return '';
+}
+
+function applySort(group, key, dir) {
+    var tbody = group.querySelector('tbody');
+    if (tbody) {
+        var rows = Array.prototype.slice.call(tbody.children);
+        // Note the order the rows arrived in, to break ties the way the server
+        // does: by when the items were added.
+        rows.forEach(function (r, i) { if (!r.dataset.ord) { r.dataset.ord = i + 1; } });
+        var back = function (a, b) { return a.dataset.ord - b.dataset.ord; };
+        rows.sort(function (a, b) {
+            var x = rowValue(a, key), y = rowValue(b, key);
+            if (x === '' || y === '') { return x === y ? back(a, b) : (x === '' ? 1 : -1); }
+            if (x < y) { return dir === 'desc' ? 1 : -1; }
+            if (x > y) { return dir === 'desc' ? -1 : 1; }
+            return back(a, b);
+        });
+        rows.forEach(function (r) { tbody.appendChild(r); });
+    }
+    group.querySelectorAll('th .sort').forEach(function (btn) {
+        var on = btn.getAttribute('data-sort') === key;
+        btn.classList.toggle('active', on);
+        btn.setAttribute('data-dir', on ? dir : '');
+    });
+}
+
+function initSort() {
+    var all = loadSorts();
+    document.querySelectorAll('#list-slot details.group').forEach(function (group) {
+        var name = group.getAttribute('data-group');
+        var cur = all[name] || DEFAULT_SORT;
+        applySort(group, cur.key, cur.dir);
+
+        group.querySelectorAll('th .sort').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var key = btn.getAttribute('data-sort');
+                var sorts = loadSorts();
+                var was = sorts[name] || DEFAULT_SORT;
+                var next = was.key !== key ? { key: key, dir: 'asc' }
+                         : was.dir === 'asc' ? { key: key, dir: 'desc' }
+                         : DEFAULT_SORT;             // third click: back to default
+                // Nothing is stored for the default, so a panel left alone
+                // follows it even if the default ever changes.
+                if (next === DEFAULT_SORT) { delete sorts[name]; } else { sorts[name] = next; }
+                saveSorts(sorts);
+                applySort(group, next.key, next.dir);
+            });
+        });
+    });
+}
+
 // Run for the page as loaded, and again for every list the server sends back
 // (the swap discards the elements these handlers were attached to).
 function initList() {
@@ -1527,6 +1639,7 @@ function initList() {
     initFilter();
     initDates();
     localizeDates();
+    initSort();
 }
 initList();
 

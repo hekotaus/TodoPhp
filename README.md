@@ -34,6 +34,17 @@ Items sharing
 the same status keep the order they were added in, and changing an item's
 status re-sorts it into place.
 
+## Sorting a panel
+
+Each panel's column captions — **Task**, **Status**, **Completion** and
+**Date** — are sort links. Panels start sorted by **Status**, in the priority
+order above, and that caption carries the arrow to show it. Click another
+caption to sort by it, click it again to reverse, and a third click returns to
+Status. Status sorts by priority, not alphabetically; rows with no date sort
+last either way. Each panel sorts on its own, the choice is remembered per
+browser, and it only changes what you see — the order of items
+in the data file is untouched.
+
 A panel above the list shows **overall completion** — the average completion
 across all tasks, with a count of how many are done and how many are still
 uncompleted, broken down by status (URGENT, PROGRESS, UNDONE, DEPENDANT,
