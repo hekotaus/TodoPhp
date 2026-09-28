@@ -5,9 +5,9 @@ frameworks — items are stored in a flat `todo.json` file next to the script.
 
 Each item has a **task** (its name), a **group**, a **status**, and a
 **completion percentage** (0–100). In the data file this is the `task` key on
-each item. Items also carry free-text **comments** (`comment`) and the date
-they were added and the date they were completed (`added` and `completed`);
-see *Comments* and *Dates* below.
+each item. Items also carry free-text **comments** (`comment`), an optional
+**due date** (`due`), and the date they were added and the date they were
+completed (`added` and `completed`); see *Comments* and *Dates* below.
 
 Valid statuses: `PENDING`, `PROGRESS`, `DEPENDING`, `DONE`, `UNDONE`,
 `URGENT`, `SKIPPED`.
@@ -94,6 +94,14 @@ dates** tick box in the toolbar reveals a *Date* column:
   reaching 100% — and is cleared if it moves back off DONE.
 - SKIPPED items show neither, and so do items created before the app recorded
   dates. Nothing is back-filled: an undated item simply shows nothing.
+
+A task can also be given a **due date** when it is added — the *Due* field in
+the add panel, which is optional. It appears in its own *Due* column beside
+the *Date* one, under the same tick box, and the column sorts like the others
+(tasks with no due date go last either way). A group whose tasks have no due
+dates has no *Due* column at all, so the width goes to the task names instead. A due date is a day on a
+calendar, so it is stored and shown as plain YYYY-MM-DD with no timezone
+attached. It can only be set when the task is added.
 
 Hovering a date shows the full timestamp. Dates are stored as an absolute
 instant (ISO-8601 with the UTC offset) and displayed in the timezone of

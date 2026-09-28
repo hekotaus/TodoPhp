@@ -189,6 +189,7 @@ function load_data(): array
             $item['group'] = '';
         }
         $item['comment'] = clean_comment($item['comment'] ?? '');
+        $item['due']     = clean_due($item['due'] ?? '');
         // Items written before dates were recorded simply have none.
         $item['added']     = clean_stamp($item['added'] ?? '');
         $item['completed'] = clean_stamp($item['completed'] ?? '');
@@ -267,6 +268,7 @@ function normalize_uploaded($data): ?array
             'completion' => clean_completion($it['completion'] ?? 0),
             'group'      => clean_group($it['group'] ?? ''),
             'comment'    => clean_comment($it['comment'] ?? ''),
+            'due'        => clean_due($it['due'] ?? ''),
             'added'      => clean_stamp($it['added'] ?? ''),
             'completed'  => clean_stamp($it['completed'] ?? ''),
         ];
@@ -316,6 +318,19 @@ function clean_comment($value): string
 function clean_group($value): string
 {
     return trim((string) $value);
+}
+
+/**
+ * A due date is a day on a calendar, not a moment, so it is kept as plain
+ * YYYY-MM-DD with no timezone attached. Anything else is dropped.
+ */
+function clean_due($value): string
+{
+    $value = trim((string) $value);
+    if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $value, $m)) {
+        return '';
+    }
+    return checkdate((int) $m[2], (int) $m[3], (int) $m[1]) ? $value : '';
 }
 
 /** Timestamp for right now, in the stored format. */
@@ -500,6 +515,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $status  = clean_status($_POST['status'] ?? null);
         $group   = clean_group($_POST['group'] ?? '');
         $comment = clean_comment($_POST['comment'] ?? '');
+        $due     = clean_due($_POST['due'] ?? '');
         // Remember the last-used group and status so the add form keeps them
         // for the next item (handy when adding several to the same group).
         setcookie('add_group', $group, ['path' => '/', 'samesite' => 'Lax']);
@@ -514,6 +530,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'completion' => $completion,
                 'group'      => $group,
                 'comment'    => $comment,
+                'due'        => $due,
                 'added'      => now_stamp(),
                 'completed'  => '',
             ]);
@@ -873,6 +890,14 @@ function render_list(array $items, array $archived = []): string
         $gp       = group_progress($groupItems);
         $rawGroup = $groupName === UNGROUPED ? '' : $groupName;
         $isArch   = is_archived($rawGroup, $archived);
+        // The Due column only earns its width in a group that uses due dates.
+        $hasDue   = false;
+        foreach ($groupItems as $x) {
+            if ($x['due'] !== '') {
+                $hasDue = true;
+                break;
+            }
+        }
         ?>
         <details class="group<?= $isArch ? ' archived' : '' ?>" data-group="<?= e($groupName) ?>" open>
             <summary>
@@ -914,6 +939,7 @@ function render_list(array $items, array $archived = []): string
                             <th class="colw-status"><?= sort_link('status', 'Status', 'Sort this group by status') ?></th>
                             <th class="colw-comp"><?= sort_link('completion', 'Completion', 'Sort this group by completion') ?></th>
                             <th class="colw-date"><?= sort_link('date', 'Date', 'Sort this group by date (added, or completed once DONE)') ?></th>
+                            <?php if ($hasDue): ?><th class="colw-due"><?= sort_link('due', 'Due', 'Sort this group by due date') ?></th><?php endif; ?>
                             <th class="colw-act"></th>
                         </tr>
                     </thead>
@@ -973,6 +999,14 @@ function render_list(array $items, array $archived = []): string
                                           title="<?= e($d['label'] . ' ' . $d['stamp']) ?>"><?= e($d['short']) ?></span>
                                 <?php endif; ?>
                             </td>
+                            <!-- Due: the day the task is due, if it has one -->
+                            <?php if ($hasDue): ?>
+                            <td class="colw-due" data-due="<?= e($it['due']) ?>">
+                                <?php if ($it['due'] !== ''): ?>
+                                    <span class="date date-due"><?= e($it['due']) ?></span>
+                                <?php endif; ?>
+                            </td>
+                            <?php endif; ?>
                             <!-- Actions: edit the comments, move to another group, delete -->
                             <td class="colw-act">
                                 <div class="row-actions">
@@ -1062,8 +1096,13 @@ function render_list(array $items, array $archived = []): string
 
     .add-form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; align-items: flex-end; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
     .add-form label { display: flex; flex-direction: column; font-size: .8rem; color: #555; gap: .2rem; }
-    input[type=text], input[type=number], select { padding: .4rem; border: 1px solid #bbb; border-radius: 4px; font-size: .9rem; background: #fff; }
-    .add-form input[type=text] { width: 150px; min-width: 0; }
+    /* Fields share the page font: browsers give each input type its own default
+       (a date field lands on monospace), which makes a row of them look mixed. */
+    input[type=text], input[type=number], input[type=date], select { padding: .4rem; border: 1px solid #bbb; border-radius: 4px; font-family: inherit; font-size: .9rem; background: #fff; }
+    /* A date field is taller than a text one by default (its picker button) and
+       picks a different family; pin both so it sits in line with the rest. */
+    input[type=date] { line-height: normal; }
+    .add-form input[type=text], .add-form input[type=date] { width: 150px; min-width: 0; }
     /* Task takes whatever width is left over, which pushes Group, Status and
        the button to the right-hand end of the row. The rest are kept to what
        they need, so the row stays unbroken on a narrower panel. */
@@ -1194,10 +1233,13 @@ function render_list(array $items, array $archived = []): string
     th.colw-comp, td.colw-comp { display: none; }
     body.show-completion th.colw-comp, body.show-completion td.colw-comp { display: table-cell; }
     .colw-date { width: 80px; white-space: nowrap; }
-    th.colw-date, td.colw-date { display: none; }
-    body.show-dates th.colw-date, body.show-dates td.colw-date { display: table-cell; }
+    .colw-due { width: 80px; white-space: nowrap; }
+    th.colw-date, td.colw-date, th.colw-due, td.colw-due { display: none; }
+    body.show-dates th.colw-date, body.show-dates td.colw-date,
+    body.show-dates th.colw-due, body.show-dates td.colw-due { display: table-cell; }
     .date { font-size: .75rem; color: #6a7280; white-space: nowrap; }
     .date-done { color: #256b34; }
+    .date-due { color: #4a5468; }
     .toolbar .check { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; color: #444; }
     .toolbar .check input { margin: 0; cursor: pointer; }
 
@@ -1227,7 +1269,7 @@ function render_list(array $items, array $archived = []): string
     }
 
     /* Sunken fields */
-    input[type=text], input[type=number], select, #file-select, .move-select {
+    input[type=text], input[type=number], input[type=date], select, #file-select, .move-select {
         border: 1px solid #b0b9c8;
         background: linear-gradient(180deg, #eef1f5, #ffffff 55%);
         box-shadow: inset 0 2px 3px rgba(20,30,50,.16);
@@ -1418,6 +1460,9 @@ function render_list(array $items, array $archived = []): string
         <label>Status
             <select name="status"><?= status_options($addStatus) ?></select>
         </label>
+        <label>Due
+            <input type="date" name="due" title="(optional) when this task is due">
+        </label>
         <button class="primary" type="submit">Add task</button>
         <label class="wide">Comments
             <textarea name="comment" rows="2" placeholder="(optional) notes about this task"></textarea>
@@ -1507,7 +1552,9 @@ function submitList(form) {
                 // added, so they are cleared.
                 var task = form.querySelector('input[name="task"]');
                 var note = form.querySelector('textarea[name="comment"]');
+                var due  = form.querySelector('input[name="due"]');
                 if (note) { note.value = ''; }
+                if (due) { due.value = ''; }
                 if (task) { task.value = ''; task.focus(); }
             }
         })
@@ -1784,6 +1831,10 @@ function rowValue(tr, key) {
         var d = tr.querySelector('.date[data-stamp]');
         var t = d ? Date.parse(d.getAttribute('data-stamp')) : NaN;
         return isNaN(t) ? '' : t;                    // undated rows last
+    }
+    if (key === 'due') {
+        var cell = tr.querySelector('td.colw-due');
+        return cell ? (cell.getAttribute('data-due') || '') : '';   // YYYY-MM-DD sorts as text
     }
     return '';
 }
