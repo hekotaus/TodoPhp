@@ -74,6 +74,9 @@ Everything is edited directly in the row — no separate edit page:
 - **Status** — pick from the coloured dropdown; saves immediately.
 - **Completion** — type a number (0–100); saves immediately. A thin line
   under the field shows that percentage at a glance.
+- The add form remembers the group and status of the last item you added, so
+  adding several to the same group is quick. Switching data file forgets the
+  group (the new file has its own groups); the status is kept.
 - **Move** — the *Move…* dropdown at the end of each row reassigns the item to
   another group. It lists the other existing groups, an *Ungrouped* option, and
   *＋ New group…* (which prompts for a new group name).

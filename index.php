@@ -343,6 +343,23 @@ function item_date(array $item): ?array
     ];
 }
 
+/**
+ * Point the app at another data file (pass '' to fall back to the default).
+ * The group the add form defaults to belongs to the file being left — its
+ * groups mean nothing in the new one — so it is forgotten at the same time.
+ * The remembered status is kept: statuses are the same in every file.
+ */
+function switch_data_file(string $fname): void
+{
+    if ($fname === '') {
+        setcookie('todo_file', '', ['path' => '/', 'expires' => 1]);
+    } else {
+        setcookie('todo_file', $fname, ['path' => '/', 'samesite' => 'Lax']);
+    }
+    setcookie('add_group', '', ['path' => '/', 'expires' => 1]);
+    unset($_COOKIE['add_group']);   // also for the rest of this request
+}
+
 /** Generate a reasonably unique id for a new item. */
 function new_id(): string
 {
@@ -525,7 +542,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 );
                 file_put_contents($path, $seed, LOCK_EX);
             }
-            setcookie('todo_file', $fname, ['path' => '/', 'samesite' => 'Lax']);
+            switch_data_file($fname);
             $activeFile = $fname;
         }
     } elseif ($action === 'upload') {
@@ -540,7 +557,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($fname !== null && $norm !== null) {
                 $json = json_encode($norm, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
                 file_put_contents(DATA_DIR . DIRECTORY_SEPARATOR . $fname, $json, LOCK_EX);
-                setcookie('todo_file', $fname, ['path' => '/', 'samesite' => 'Lax']);
+                switch_data_file($fname);
                 $activeFile = $fname;
             }
         }
@@ -557,11 +574,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             natcasesort($remaining);
             $remaining = array_values($remaining);
             if (!empty($remaining)) {
-                setcookie('todo_file', $remaining[0], ['path' => '/', 'samesite' => 'Lax']);
+                switch_data_file($remaining[0]);
                 $activeFile = $remaining[0];
             } else {
                 // Nothing left: clear the selection so it falls back to todo.json.
-                setcookie('todo_file', '', ['path' => '/', 'expires' => 1]);
+                switch_data_file('');
                 $activeFile = 'todo.json';
             }
         }
