@@ -793,14 +793,14 @@ function render_list(array $items): string
     <div class="toolbar">
         <button type="button" id="expand-all">Expand all</button>
         <button type="button" id="collapse-all">Collapse all</button>
-        <label class="check" title="Show the Move and Delete controls on each task">
-            <input type="checkbox" id="show-controls"> Show task controls
-        </label>
         <label class="check" title="Show each task's completion">
             <input type="checkbox" id="show-completion"> Show completion
         </label>
         <label class="check" title="Show when each task was added, or when it was completed">
             <input type="checkbox" id="show-dates"> Show dates
+        </label>
+        <label class="check" title="Show the Move and Delete controls on each task">
+            <input type="checkbox" id="show-controls"> Show task controls
         </label>
         <button type="button" id="undone-only" class="toggle" aria-pressed="false"
                 title="Hide DONE and SKIPPED items">Undone only</button>
@@ -1538,9 +1538,9 @@ function initFilter() {
 // on <body> for the CSS to match. Ticked unless the user says otherwise, and
 // the choice is remembered per browser.
 var COLUMN_TOGGLES = [
-    { id: 'show-controls',   key: 'todo-show-controls',   cls: 'show-controls' },
     { id: 'show-completion', key: 'todo-show-completion', cls: 'show-completion' },
-    { id: 'show-dates',      key: 'todo-show-dates',      cls: 'show-dates' }
+    { id: 'show-dates',      key: 'todo-show-dates',      cls: 'show-dates' },
+    { id: 'show-controls',   key: 'todo-show-controls',   cls: 'show-controls' }
 ];
 
 function toggleIsOn(t) {
