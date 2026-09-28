@@ -175,6 +175,9 @@ function load_data(): array
         $items = (isset($data['items']) && is_array($data['items'])) ? $data['items'] : [];
     }
 
+    // Groups the user has archived, by group name ('' is the ungrouped bucket).
+    $archived = clean_archived(is_array($data) ? ($data['archived'] ?? []) : []);
+
     // Normalize items: migrate the old "name" key to "task", and make sure a
     // group key exists (older data files may lack both).
     foreach ($items as &$item) {
@@ -192,20 +195,41 @@ function load_data(): array
     }
     unset($item);
 
-    return ['name' => $name, 'items' => array_values($items)];
+    return ['name' => $name, 'items' => array_values($items), 'archived' => $archived];
+}
+
+/** Keep only usable group names, once each. */
+function clean_archived($value): array
+{
+    if (!is_array($value)) {
+        return [];
+    }
+    $out = [];
+    foreach ($value as $g) {
+        if (is_string($g)) {
+            $out[trim($g)] = true;
+        }
+    }
+    return array_keys($out);
+}
+
+/** Is this group (the raw group value, '' for ungrouped) archived? */
+function is_archived(string $group, array $archived): bool
+{
+    return in_array(trim($group), $archived, true);
 }
 
 /**
  * Persist the list name and items to the JSON file with an exclusive lock so
  * concurrent requests don't clobber each other.
  */
-function save_data(string $name, array $items): void
+function save_data(string $name, array $items, array $archived = []): void
 {
     $name = trim($name);
     if ($name === '') {
         $name = DEFAULT_LIST_NAME;
     }
-    $payload = ['name' => $name, 'items' => array_values($items)];
+    $payload = ['name' => $name, 'items' => array_values($items), 'archived' => array_values($archived)];
     $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     file_put_contents(DATA_FILE, $json, LOCK_EX);
 }
@@ -247,7 +271,11 @@ function normalize_uploaded($data): ?array
             'completed'  => clean_stamp($it['completed'] ?? ''),
         ];
     }
-    return ['name' => $name, 'items' => $clean];
+    return [
+        'name'     => $name,
+        'items'    => $clean,
+        'archived' => clean_archived(is_array($data) ? ($data['archived'] ?? []) : []),
+    ];
 }
 
 /** Coerce a status string to a valid value, defaulting to PENDING. */
@@ -410,7 +438,7 @@ function status_rank(string $status): int
  * ordered by status per STATUS_ORDER (stable: equal statuses keep their
  * existing relative order).
  */
-function group_items(array $items): array
+function group_items(array $items, array $archived = []): array
 {
     $buckets = [];
     foreach ($items as $it) {
@@ -418,7 +446,14 @@ function group_items(array $items): array
         $key = $g === '' ? UNGROUPED : $g;
         $buckets[$key][] = $it;
     }
-    uksort($buckets, static function ($a, $b) {
+    uksort($buckets, static function ($a, $b) use ($archived) {
+        // Archived groups sit after everything else, then the ungrouped bucket
+        // after the named ones, then plain alphabetical order.
+        $aa = is_archived($a === UNGROUPED ? '' : $a, $archived);
+        $ab = is_archived($b === UNGROUPED ? '' : $b, $archived);
+        if ($aa !== $ab) {
+            return $aa ? 1 : -1;
+        }
         if ($a === UNGROUPED) {
             return 1;
         }
@@ -457,6 +492,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $data       = load_data();
     $listName   = $data['name'];
     $items      = $data['items'];
+    $archived   = $data['archived'];
     $activeFile = basename(DATA_FILE);   // carried into the redirect URL
 
     if ($action === 'add') {
@@ -481,7 +517,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'added'      => now_stamp(),
                 'completed'  => '',
             ]);
-            save_data($listName, $items);
+            save_data($listName, $items, $archived);
         }
     } elseif ($action === 'update_field') {
         // Inline edit of a single field on a single item.
@@ -526,12 +562,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             unset($item);
-            save_data($listName, $items);
+            save_data($listName, $items, $archived);
         }
     } elseif ($action === 'delete') {
         $id = (string) ($_POST['id'] ?? '');
         $items = array_filter($items, static fn($it) => $it['id'] !== $id);
-        save_data($listName, $items);
+        save_data($listName, $items, $archived);
     } elseif ($action === 'rename_group') {
         // Rename a whole group in one go.
         $from = clean_group($_POST['from'] ?? '');
@@ -543,12 +579,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             unset($item);
-            save_data($listName, $items);
+            // The archived flag belongs to the group, so it follows the name.
+            if (is_archived($from, $archived)) {
+                $archived = array_values(array_diff($archived, [$from]));
+                $archived[] = $to;
+                $archived = clean_archived($archived);
+            }
+            save_data($listName, $items, $archived);
         }
+    } elseif ($action === 'set_archived') {
+        // Archive or un-archive a whole group ('' is the ungrouped bucket).
+        $group = clean_group($_POST['group'] ?? '');
+        $on    = ($_POST['value'] ?? '') === '1';
+        $archived = array_values(array_diff($archived, [$group]));
+        if ($on) {
+            $archived[] = $group;
+        }
+        save_data($listName, $items, $archived);
     } elseif ($action === 'rename_list') {
         // Rename the whole todo list.
         $listName = trim((string) ($_POST['value'] ?? ''));
-        save_data($listName, $items);
+        save_data($listName, $items, $archived);
     } elseif ($action === 'select_file') {
         // Switch which data file the app uses; create it if new.
         $fname = safe_data_filename($_POST['file'] ?? '');
@@ -611,13 +662,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // list actions qualify; the file actions change which file is shown and
     // still go through a normal submit and full load.
     if (($_POST['ajax'] ?? '') === '1'
-        && in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list'], true)) {
+        && in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived'], true)) {
         header('Content-Type: application/json');
         header('Cache-Control: no-store');
         echo json_encode([
             'ok'     => true,
-            'list'   => render_list($items),
-            'stats'  => render_stats($items),
+            'list'   => render_list($items, $archived),
+            'stats'  => render_stats($items, $archived),
             'groups' => render_group_options($items),
             'name'   => $listName,
             'sig'    => file_signature(),   // now ours, so the poll stays quiet
@@ -637,6 +688,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $data     = load_data();
 $listName = $data['name'];
 $items    = $data['items'];
+$archived = $data['archived'];
 
 // Sticky defaults for the add form (kept from the last added item).
 $addGroup  = clean_group($_COOKIE['add_group'] ?? '');
@@ -710,8 +762,13 @@ function sort_link(string $key, string $label, string $title = ''): string
  * Overall figures for the stats panel. SKIPPED items are left out of the
  * completion average; OPEN_STATUSES are tallied as outstanding work.
  */
-function compute_stats(array $items): array
+function compute_stats(array $items, array $archived = []): array
 {
+    // Anything in an archived group is out of the picture entirely.
+    $live       = array_values(array_filter($items, static fn($i) => !is_archived((string) ($i['group'] ?? ''), $archived)));
+    $archivedN  = count($items) - count($live);
+    $items      = $live;
+
     $counted  = array_values(array_filter($items, static fn($i) => ($i['status'] ?? '') !== 'SKIPPED'));
     $countedN = count($counted);
 
@@ -721,7 +778,8 @@ function compute_stats(array $items): array
     }
 
     return [
-        'countedN' => $countedN,
+        'countedN'  => $countedN,
+        'archivedN' => $archivedN,
         'skippedN' => count($items) - $countedN,
         'overall'  => $countedN
             ? (int) round(array_sum(array_map(static fn($i) => (int) $i['completion'], $counted)) / $countedN)
@@ -739,12 +797,12 @@ function compute_stats(array $items): array
 // ---------------------------------------------------------------------------
 
 /** Stats panel; empty string when there is nothing to report. */
-function render_stats(array $items): string
+function render_stats(array $items, array $archived = []): string
 {
     if (empty($items)) {
         return '';
     }
-    $st = compute_stats($items);
+    $st = compute_stats($items, $archived);
     ob_start(); ?>
     <div class="stats">
         <div class="stat-figure">
@@ -757,6 +815,7 @@ function render_stats(array $items): string
             <span class="sep">·</span> <b><?= $st['doneN'] ?></b> done
             <span class="sep">·</span> <b><?= $st['openN'] ?></b> uncompleted
             <?php if ($st['skippedN'] > 0): ?><span class="sep">·</span> <b><?= $st['skippedN'] ?></b> skipped <span class="quiet">(excluded)</span><?php endif; ?>
+            <?php if ($st['archivedN'] > 0): ?><span class="sep">·</span> <b><?= $st['archivedN'] ?></b> archived <span class="quiet">(excluded)</span><?php endif; ?>
         </div>
         <?php if ($st['openN'] > 0): ?>
         <div class="stat-open">
@@ -782,11 +841,11 @@ function render_group_options(array $items): string
 }
 
 /** The toolbar, the grouped item tables and the item-count footer. */
-function render_list(array $items): string
+function render_list(array $items, array $archived = []): string
 {
     $items   = array_values($items);
     $groups  = existing_groups($items);
-    $buckets = group_items($items);
+    $buckets = group_items($items, $archived);
     ob_start(); ?>
     <?php if (empty($items)): ?>
         <p class="empty">No items yet. Add your first one above.</p>
@@ -810,8 +869,12 @@ function render_list(array $items): string
 
     <div class="groups">
     <?php foreach ($buckets as $groupName => $groupItems): ?>
-        <?php $gp = group_progress($groupItems); ?>
-        <details class="group" data-group="<?= e($groupName) ?>" open>
+        <?php
+        $gp       = group_progress($groupItems);
+        $rawGroup = $groupName === UNGROUPED ? '' : $groupName;
+        $isArch   = is_archived($rawGroup, $archived);
+        ?>
+        <details class="group<?= $isArch ? ' archived' : '' ?>" data-group="<?= e($groupName) ?>" open>
             <summary>
                 <span class="caret">&#9654;</span>
                 <span class="gname"><?= e($groupName) ?></span>
@@ -829,6 +892,17 @@ function render_list(array $items): string
                         </form>
                     <?php endif; ?>
                 </span>
+                <!-- Archiving sends the group to the end of the list and takes
+                     it out of the statistics. -->
+                <form class="inline arch-form" method="post" action="" onclick="event.stopPropagation();">
+                    <input type="hidden" name="action" value="set_archived">
+                    <input type="hidden" name="group" value="<?= e($rawGroup) ?>">
+                    <input type="hidden" name="value" value="<?= $isArch ? '0' : '1' ?>">
+                    <label class="check arch-check" title="Archive this group: send it to the end and leave it out of the statistics">
+                        <input type="checkbox" <?= $isArch ? 'checked' : '' ?>
+                               onchange="submitList(this.form)"> Archived
+                    </label>
+                </form>
             </summary>
             <div class="group-body">
                 <table>
@@ -1125,6 +1199,18 @@ function render_list(array $items): string
     .toolbar .check { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; color: #444; }
     .toolbar .check input { margin: 0; cursor: pointer; }
 
+    /* Archive tick box on a group header, and how an archived group looks */
+    .arch-form { margin: 0; }
+    .arch-check {
+        display: inline-flex; align-items: center; gap: .25rem; cursor: pointer;
+        font-size: .72rem; font-weight: 600; letter-spacing: .02em; color: #7a8497;
+        text-transform: uppercase;
+    }
+    .arch-check input { margin: 0; cursor: pointer; }
+    details.group.archived > summary { background: #f1f2f5; }
+    details.group.archived .gname { color: #7c8496; }
+    details.group.archived .arch-check { color: #5b657f; }
+
     /* ============================================================
        3D THEME — depth via gradients, bevels and drop shadows.
        Appended last so it layers over the base styles above.
@@ -1337,14 +1423,14 @@ function render_list(array $items): string
     </form>
 
     <!-- Overall completion stats (replaced in place after an edit) -->
-    <div id="stats-slot" class="stats-slot"><?= render_stats($items) ?></div>
+    <div id="stats-slot" class="stats-slot"><?= render_stats($items, $archived) ?></div>
 </div>
 
 <!-- Autocomplete list of existing group names (used by add + move) -->
 <datalist id="group-list"><?= render_group_options($items) ?></datalist>
 
 <!-- The list itself (replaced in place after an edit) -->
-<div id="list-slot"><?= render_list($items) ?></div>
+<div id="list-slot"><?= render_list($items, $archived) ?></div>
 
 <!-- Comment editor. One for the page: a row's Comment button fills it in and
      opens it, and saving posts the same update_field the inline fields do. -->
@@ -1373,7 +1459,7 @@ function render_list(array $items): string
 
 // Actions that only change list contents, and so can be applied in place. File
 // actions (select / upload / delete file) submit normally and reload the page.
-var LIST_ACTIONS = ['add', 'update_field', 'delete', 'rename_group', 'rename_list'];
+var LIST_ACTIONS = ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived'];
 
 // Signature of the data file as the page currently shows it, and the file the
 // page is bound to. Both are kept current by applyUpdate().
