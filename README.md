@@ -64,8 +64,10 @@ being added. A task that carries comments is marked with a small dot in front
 of its name. Hovering a task row shows a tooltip with its full name (handy
 when the column is too narrow for it) and its comments underneath.
 
-Comments are set when the item is added; they survive every later edit, but
-there is no way to change them from the page yet.
+The **Comment** button at the start of each row's controls opens an editor
+for that task's comments: type, then **Save** (or **Cancel** to leave them as
+they were). Saving an empty box clears the comments. The button is outlined in
+blue on tasks that already have some, like the dot beside the name.
 
 ## Dates
 
@@ -96,7 +98,7 @@ Everything is edited directly in the row — no separate edit page:
 - **Status** — pick from the coloured dropdown; saves immediately.
 - **Completion** — type a number (0–100); saves immediately. A thin line
   under the field shows that percentage at a glance. The **Show completion**
-  tick box in the toolbar hides the whole column when you don'''t need it
+  tick box in the toolbar hides the whole column when you don't need it
   (remembered per browser, like **Show dates** next to it).
 - The add form remembers the group and status of the last item you added, so
   adding several to the same group is quick. Switching data file forgets the

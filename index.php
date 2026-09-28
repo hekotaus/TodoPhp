@@ -136,7 +136,7 @@ const UNGROUPED = 'Ungrouped';
 const DATE_FORMAT = 'c';
 
 /** Fields that may be updated inline. */
-const EDITABLE_FIELDS = ['task', 'status', 'completion', 'group'];
+const EDITABLE_FIELDS = ['task', 'status', 'completion', 'group', 'comment'];
 
 /**
  * Default name for a todo list that hasn't been named yet.
@@ -519,6 +519,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $item = stamp_done($item);
                     } elseif ($field === 'group') {
                         $item['group'] = clean_group($value);
+                    } elseif ($field === 'comment') {
+                        $item['comment'] = clean_comment($value);
                     }
                     break;
                 }
@@ -901,9 +903,13 @@ function render_list(array $items): string
                                           title="<?= e($d['label'] . ' ' . $d['stamp']) ?>"><?= e($d['short']) ?></span>
                                 <?php endif; ?>
                             </td>
-                            <!-- Actions: move to another group + delete -->
+                            <!-- Actions: edit the comments, move to another group, delete -->
                             <td class="colw-act">
                                 <div class="row-actions">
+                                    <button type="button" class="note-btn<?= $it['comment'] === '' ? '' : ' has' ?>"
+                                            data-id="<?= e($it['id']) ?>" data-task="<?= e($it['task']) ?>"
+                                            data-comment="<?= e($it['comment']) ?>"
+                                            title="<?= $it['comment'] === '' ? 'Add comments' : 'Edit comments' ?>">Comment</button>
                                     <form class="inline move-form" method="post" action="">
                                         <input type="hidden" name="action" value="update_field">
                                         <input type="hidden" name="id" value="<?= e($it['id']) ?>">
@@ -1078,7 +1084,30 @@ function render_list(array $items): string
     /* Move and Delete share a width, so the two controls line up down the column.
        76px is what the select needs to show "Move…" next to its arrow; Delete
        would fit in less, but matching widths matter more than a few pixels. */
-    .row-actions .move-select, .row-actions button.del { width: 76px; }
+    .row-actions .move-select, .row-actions button.del, .row-actions button.note-btn { width: 76px; }
+    button.note-btn {
+        font-size: .8rem; padding: .12rem .5rem; border-radius: 4px;
+        border: 1px solid #c3cbd9; background: #fff; color: #4a5468; cursor: pointer;
+    }
+    button.note-btn.has { border-color: #8fabe0; color: #24509e; }   /* already has notes */
+
+    /* Comment editor */
+    dialog.note-dialog {
+        padding: 0; width: min(560px, 92vw); border: 1px solid #b9c2d2; border-radius: 8px;
+        box-shadow: 0 12px 34px rgba(20,30,50,.32);
+    }
+    dialog.note-dialog::backdrop { background: rgba(20,30,50,.35); }
+    .note-dialog h2 {
+        font-size: .95rem; margin: 0; padding: .55rem .8rem; color: #33405a;
+        border-bottom: 1px solid #dfe4ee; background: linear-gradient(180deg, #ffffff, #eef1f7);
+        border-radius: 8px 8px 0 0;
+    }
+    .note-dialog form { margin: 0; padding: .7rem .8rem .8rem; display: flex; flex-direction: column; gap: .6rem; }
+    .note-dialog textarea {
+        width: 100%; font: inherit; font-size: .9rem; min-height: 8rem; resize: vertical;
+        padding: .4rem .5rem; border: 1px solid #b9c2d2; border-radius: 4px;
+    }
+    .note-actions { display: flex; justify-content: flex-end; gap: .5rem; }
     button.del { background: #fff; color: #c0392b; border: 1px solid #e3b6b1; border-radius: 4px; padding: .12rem .5rem; font-size: .8rem; }
     button.del:hover { background: #fdecea; }
     .empty { color: #999; font-style: italic; padding: 1rem 0; }
@@ -1320,6 +1349,22 @@ function render_list(array $items): string
 
 <!-- The list itself (replaced in place after an edit) -->
 <div id="list-slot"><?= render_list($items) ?></div>
+
+<!-- Comment editor. One for the page: a row's Comment button fills it in and
+     opens it, and saving posts the same update_field the inline fields do. -->
+<dialog id="note-dialog" class="note-dialog">
+    <h2>Comments — <span class="note-task"></span></h2>
+    <form method="post" action="">
+        <input type="hidden" name="action" value="update_field">
+        <input type="hidden" name="id" value="">
+        <input type="hidden" name="field" value="comment">
+        <textarea name="value" placeholder="Notes about this task"></textarea>
+        <div class="note-actions">
+            <button type="button" class="note-cancel">Cancel</button>
+            <button type="button" class="primary note-save">Save</button>
+        </div>
+    </form>
+</dialog>
 
 <script>
 // ---------------------------------------------------------------------------
@@ -1706,6 +1751,35 @@ function initSort() {
     });
 }
 
+// The comment editor. The dialog lives outside the list, so its own buttons
+// are wired once; the row buttons are wired again for each list the server
+// sends back.
+var noteDialog = document.getElementById('note-dialog');
+
+function initNoteButtons() {
+    if (!noteDialog) { return; }
+    document.querySelectorAll('#list-slot .note-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            noteDialog.querySelector('.note-task').textContent = btn.getAttribute('data-task');
+            noteDialog.querySelector('input[name="id"]').value = btn.getAttribute('data-id');
+            var box = noteDialog.querySelector('textarea');
+            box.value = btn.getAttribute('data-comment') || '';
+            noteDialog.showModal();
+            box.focus();
+        });
+    });
+}
+
+if (noteDialog) {
+    noteDialog.querySelector('.note-save').addEventListener('click', function () {
+        submitList(noteDialog.querySelector('form'));   // saves, then repaints the row
+        noteDialog.close();
+    });
+    noteDialog.querySelector('.note-cancel').addEventListener('click', function () {
+        noteDialog.close();                             // Escape does the same
+    });
+}
+
 // Run for the page as loaded, and again for every list the server sends back
 // (the swap discards the elements these handlers were attached to).
 function initList() {
@@ -1713,6 +1787,7 @@ function initList() {
     initCollapse();
     initFilter();
     initToggles();
+    initNoteButtons();
     localizeDates();
     initSort();
 }
