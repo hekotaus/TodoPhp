@@ -105,6 +105,24 @@ width goes to the task names instead. A due date is a day on a
 calendar, so it is stored and shown as plain YYYY-MM-DD with no timezone
 attached.
 
+**A near due date makes a task urgent.** A task that is still only **UNDONE**
+or **PENDING** is moved to **URGENT** once its due date is less than five days
+away, overdue ones included. PROGRESS and DEPENDANT are left alone (they say
+something the due date shouldn'''t overwrite), as are DONE and SKIPPED. The rule
+is applied when the page is loaded and after every change, so a task becomes
+urgent on its own as the date approaches; the change is written to the data
+file. It is one-way: moving such a task back to PENDING or UNDONE by hand
+promotes it again while its due date is still near.
+
+“Today” comes from the timezone the list is kept in, which each data file
+records under `timezone` (e.g. `"Australia/Adelaide"`). A file without one —
+anything written before this existed — picks up the `TIMEZONE` constant at the
+top of `index.php`, and records it the first time it is saved, so every list
+ends up saying what its dates mean. PHP otherwise falls back to UTC, which
+would put the five-day window hours behind the people using the list. The
+timezone also decides the offset written into the added and completed
+timestamps; edit the line in the file (or the constant) to change it.
+
 Click a due date in the list to change it, the same as any other field: the
 cell is a date field that reads as plain text until you point at it, and it
 saves when you pick a date. Clearing the field removes the due date; once the
@@ -189,9 +207,9 @@ disk.
   status and completion).
 - `todo.json` — the default data file (switch files from the app header).
   Created automatically on first save; holds the list name and its items as
-  `{ "name": ..., "items": [ ... ], "archived": [ ... ] }`. Older files that were
-  a bare array of items are still read correctly and upgraded to this format on
-  the next save.
+  `{ "name": ..., "timezone": ..., "items": [ ... ], "archived": [ ... ] }`.
+  Older files that were a bare array of items are still read correctly and
+  upgraded to this format on the next save.
 
 ## Notes
 

@@ -25,6 +25,38 @@ declare(strict_types=1);
  * then open http://localhost:8000 in your browser.
  */
 
+/**
+ * Timezone the app works in. PHP falls back to UTC when php.ini doesn't say
+ * otherwise, which is what the built-in server does — and that puts "today"
+ * hours behind the people using the list, so a due date can fall on the wrong
+ * side of the five-day window all morning. Set it to '' to follow whatever the
+ * server is configured for instead. An unknown name is ignored rather than
+ * being allowed to take the whole page down.
+ */
+const TIMEZONE = 'Australia/Adelaide';
+
+/** A timezone name PHP knows, or '' for "not set". */
+function clean_timezone($value): string
+{
+    $value = trim((string) $value);
+    return ($value !== '' && in_array($value, DateTimeZone::listIdentifiers(), true)) ? $value : '';
+}
+
+/**
+ * Work in the given timezone, falling back to TIMEZONE. Each data file records
+ * its own (see load_data), so a list written in one place keeps meaning the
+ * same thing when it is opened somewhere else.
+ */
+function apply_timezone(string $zone = ''): void
+{
+    $zone = clean_timezone($zone) ?: clean_timezone(TIMEZONE);
+    if ($zone !== '') {
+        date_default_timezone_set($zone);
+    }
+}
+
+apply_timezone();
+
 /** Directory the app manages data files in (and lists in the file picker). */
 const DATA_DIR = __DIR__;
 
@@ -135,6 +167,15 @@ const UNGROUPED = 'Ungrouped';
  */
 const DATE_FORMAT = 'c';
 
+/**
+ * A task that is still only waiting — UNDONE or PENDING — turns URGENT once
+ * its due date is less than DUE_URGENT_DAYS away, overdue ones included. The
+ * other statuses are left alone: PROGRESS and DEPENDANT say something the due
+ * date shouldn't overwrite, and DONE and SKIPPED are finished with.
+ */
+const DUE_URGENT_FROM = ['UNDONE', 'PENDING'];
+const DUE_URGENT_DAYS = 5;
+
 /** Fields that may be updated inline. */
 const EDITABLE_FIELDS = ['task', 'status', 'completion', 'group', 'comment', 'due'];
 
@@ -177,6 +218,8 @@ function load_data(): array
 
     // Groups the user has archived, by group name ('' is the ungrouped bucket).
     $archived = clean_archived(is_array($data) ? ($data['archived'] ?? []) : []);
+    // The timezone this list is kept in; '' means the app's own.
+    $timezone = clean_timezone(is_array($data) ? ($data['timezone'] ?? '') : '');
 
     // Normalize items: migrate the old "name" key to "task", and make sure a
     // group key exists (older data files may lack both).
@@ -196,7 +239,12 @@ function load_data(): array
     }
     unset($item);
 
-    return ['name' => $name, 'items' => array_values($items), 'archived' => $archived];
+    return [
+        'name'     => $name,
+        'items'    => array_values($items),
+        'archived' => $archived,
+        'timezone' => $timezone,
+    ];
 }
 
 /** Keep only usable group names, once each. */
@@ -224,13 +272,20 @@ function is_archived(string $group, array $archived): bool
  * Persist the list name and items to the JSON file with an exclusive lock so
  * concurrent requests don't clobber each other.
  */
-function save_data(string $name, array $items, array $archived = []): void
+function save_data(string $name, array $items, array $archived = [], string $timezone = ''): void
 {
     $name = trim($name);
     if ($name === '') {
         $name = DEFAULT_LIST_NAME;
     }
-    $payload = ['name' => $name, 'items' => array_values($items), 'archived' => array_values($archived)];
+    // A file with no timezone of its own records the one in use, so it says
+    // what its dates mean from the first save onwards.
+    $payload = [
+        'name'     => $name,
+        'timezone' => clean_timezone($timezone) ?: date_default_timezone_get(),
+        'items'    => array_values($items),
+        'archived' => array_values($archived),
+    ];
     $json = json_encode($payload, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
     file_put_contents(DATA_FILE, $json, LOCK_EX);
 }
@@ -275,6 +330,7 @@ function normalize_uploaded($data): ?array
     }
     return [
         'name'     => $name,
+        'timezone' => clean_timezone(is_array($data) ? ($data['timezone'] ?? '') : ''),
         'items'    => $clean,
         'archived' => clean_archived(is_array($data) ? ($data['archived'] ?? []) : []),
     ];
@@ -331,6 +387,27 @@ function clean_due($value): string
         return '';
     }
     return checkdate((int) $m[2], (int) $m[3], (int) $m[1]) ? $value : '';
+}
+
+/**
+ * Apply the due-date rule to the whole list, and say whether anything moved so
+ * the caller knows to write the file. "Today" is the server's date, so a list
+ * served from a machine in another timezone can be a day out at the boundary.
+ */
+function promote_due_soon(array &$items): bool
+{
+    $cutoff  = date('Y-m-d', strtotime('+' . DUE_URGENT_DAYS . ' days'));
+    $changed = false;
+    foreach ($items as &$item) {
+        if (($item['due'] ?? '') !== ''
+            && in_array($item['status'] ?? '', DUE_URGENT_FROM, true)
+            && $item['due'] < $cutoff) {          // both are YYYY-MM-DD
+            $item['status'] = 'URGENT';
+            $changed = true;
+        }
+    }
+    unset($item);
+    return $changed;
 }
 
 /** Timestamp for right now, in the stored format. */
@@ -508,7 +585,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $listName   = $data['name'];
     $items      = $data['items'];
     $archived   = $data['archived'];
+    $timezone   = $data['timezone'];
     $activeFile = basename(DATA_FILE);   // carried into the redirect URL
+
+    // Dates below — stamps on edits, the due-date window — are this list's own.
+    apply_timezone($timezone);
 
     if ($action === 'add') {
         $task    = trim((string) ($_POST['task'] ?? ''));
@@ -534,7 +615,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'added'      => now_stamp(),
                 'completed'  => '',
             ]);
-            save_data($listName, $items, $archived);
+            save_data($listName, $items, $archived, $timezone);
         }
     } elseif ($action === 'update_field') {
         // Inline edit of a single field on a single item.
@@ -581,12 +662,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
             unset($item);
-            save_data($listName, $items, $archived);
+            save_data($listName, $items, $archived, $timezone);
         }
     } elseif ($action === 'delete') {
         $id = (string) ($_POST['id'] ?? '');
         $items = array_filter($items, static fn($it) => $it['id'] !== $id);
-        save_data($listName, $items, $archived);
+        save_data($listName, $items, $archived, $timezone);
     } elseif ($action === 'rename_group') {
         // Rename a whole group in one go.
         $from = clean_group($_POST['from'] ?? '');
@@ -604,7 +685,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $archived[] = $to;
                 $archived = clean_archived($archived);
             }
-            save_data($listName, $items, $archived);
+            save_data($listName, $items, $archived, $timezone);
         }
     } elseif ($action === 'set_archived') {
         // Archive or un-archive a whole group ('' is the ungrouped bucket).
@@ -614,11 +695,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($on) {
             $archived[] = $group;
         }
-        save_data($listName, $items, $archived);
+        save_data($listName, $items, $archived, $timezone);
     } elseif ($action === 'rename_list') {
         // Rename the whole todo list.
         $listName = trim((string) ($_POST['value'] ?? ''));
-        save_data($listName, $items, $archived);
+        save_data($listName, $items, $archived, $timezone);
     } elseif ($action === 'select_file') {
         // Switch which data file the app uses; create it if new.
         $fname = safe_data_filename($_POST['file'] ?? '');
@@ -627,7 +708,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (!is_file($path)) {
                 $base = (string) pathinfo($fname, PATHINFO_FILENAME);
                 $seed = json_encode(
-                    ['name' => ($base !== '' ? $base : DEFAULT_LIST_NAME), 'items' => []],
+                    [
+                        'name'     => ($base !== '' ? $base : DEFAULT_LIST_NAME),
+                        'timezone' => date_default_timezone_get(),
+                        'items'    => [],
+                    ],
                     JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
                 );
                 file_put_contents($path, $seed, LOCK_EX);
@@ -674,6 +759,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // A change may have brought a task inside the due-date window, and time
+    // alone may have done the same to others, so the rule runs over the list
+    // before the answer goes out. File actions are left alone: $items there
+    // belongs to the file being switched away from.
+    if (in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list', 'set_archived'], true)
+        && promote_due_soon($items)) {
+        save_data($listName, $items, $archived, $timezone);
+    }
+
     // Background edit from the page: answer with the re-rendered fragments
     // instead of redirecting. They are built from the items still in memory —
     // exactly what was just written — so the data file is not read back, and
@@ -708,6 +802,15 @@ $data     = load_data();
 $listName = $data['name'];
 $items    = $data['items'];
 $archived = $data['archived'];
+$timezone = $data['timezone'];
+
+apply_timezone($timezone);
+
+// Due dates come round on their own, so the rule is applied when the page is
+// loaded too, and written back when it actually changed something.
+if (promote_due_soon($items)) {
+    save_data($listName, $items, $archived, $timezone);
+}
 
 // Sticky defaults for the add form (kept from the last added item).
 $addGroup  = clean_group($_COOKIE['add_group'] ?? '');
