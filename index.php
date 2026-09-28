@@ -733,10 +733,10 @@ function render_stats(array $items): string
         </div>
         <div class="stat-bar bar"><span style="width: <?= $st['overall'] ?>%;"></span></div>
         <div class="stat-meta">
-            <?= $st['countedN'] ?> task<?= $st['countedN'] === 1 ? '' : 's' ?>
-            · <?= $st['doneN'] ?> done
-            · <?= $st['openN'] ?> uncompleted
-            <?php if ($st['skippedN'] > 0): ?>· <?= $st['skippedN'] ?> skipped (excluded)<?php endif; ?>
+            <b><?= $st['countedN'] ?></b> task<?= $st['countedN'] === 1 ? '' : 's' ?>
+            <span class="sep">·</span> <b><?= $st['doneN'] ?></b> done
+            <span class="sep">·</span> <b><?= $st['openN'] ?></b> uncompleted
+            <?php if ($st['skippedN'] > 0): ?><span class="sep">·</span> <b><?= $st['skippedN'] ?></b> skipped <span class="quiet">(excluded)</span><?php endif; ?>
         </div>
         <?php if ($st['openN'] > 0): ?>
         <div class="stat-open">
@@ -1161,23 +1161,28 @@ function render_list(array $items): string
     }
     .stat-figure { display: flex; align-items: baseline; gap: .4rem; }
     .stat-pct { font-size: 1.9rem; font-weight: 700; color: #2560c8; text-shadow: 0 1px 0 rgba(255,255,255,.8); }
-    .stat-label { font-size: .8rem; color: #667; }
+    .stat-label { font-size: .88rem; color: #4a5468; }
     .stat-bar { flex: 1 1 100%; height: 14px; }
-    .stat-meta { font-size: .82rem; color: #778; }
+    /* The counts are what gets read, so they are dark and set in figures that
+       line up; the words around them stay quieter. */
+    .stat-meta { font-size: .92rem; color: #4a5468; line-height: 1.5; }
+    .stat-meta b { font-weight: 700; color: #1f2733; font-variant-numeric: tabular-nums; }
+    .stat-meta .sep { color: #9aa4b5; margin: 0 .15rem; }
+    .stat-meta .quiet { color: #78839a; }
 
     /* Per-status breakdown of the uncompleted tasks */
-    .stat-open { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: .3rem; }
+    .stat-open { flex: 1 1 100%; display: flex; flex-wrap: wrap; gap: .35rem; }
     .open-chip {
-        font-size: .68rem; font-weight: 600; letter-spacing: .02em;
-        border-radius: 10px; padding: .1rem .45rem;
+        font-size: .76rem; font-weight: 600; letter-spacing: .02em;
+        border-radius: 11px; padding: .14rem .55rem;
         border: 1px solid rgba(0,0,0,.08);
         box-shadow: inset 0 1px 0 rgba(255,255,255,.65);
     }
-    .open-chip b { font-weight: 700; }
+    .open-chip b { font-weight: 700; font-variant-numeric: tabular-nums; }
     .open-chip.PENDING   { background: #eef; color: #445; }
-    .open-chip.PROGRESS  { background: #d6e4ff; color: #1d4ed8; }
-    .open-chip.DEPENDANT { background: #fef3d6; color: #8a6d1c; }
-    .open-chip.UNDONE    { background: #fde2e0; color: #b02a20; }
+    .open-chip.PROGRESS  { background: #d6e4ff; color: #1a45b8; }
+    .open-chip.DEPENDANT { background: #fdeec2; color: #7a5f10; }
+    .open-chip.UNDONE    { background: #fde2e0; color: #a5241b; }
     .open-chip.URGENT    { background: #b02020; color: #fff; }
 </style>
 </head>
