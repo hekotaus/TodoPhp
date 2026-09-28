@@ -815,7 +815,7 @@ function render_stats(array $items, array $archived = []): string
             <span class="sep">·</span> <b><?= $st['doneN'] ?></b> done
             <span class="sep">·</span> <b><?= $st['openN'] ?></b> uncompleted
             <?php if ($st['skippedN'] > 0): ?><span class="sep">·</span> <b><?= $st['skippedN'] ?></b> skipped <span class="quiet">(excluded)</span><?php endif; ?>
-            <?php if ($st['archivedN'] > 0): ?><span class="sep">·</span> <b><?= $st['archivedN'] ?></b> archived <span class="quiet">(excluded)</span><?php endif; ?>
+            <?php if ($st['archivedN'] > 0): ?><span class="sep">·</span> <b><?= $st['archivedN'] ?></b> inactive <span class="quiet">(excluded)</span><?php endif; ?>
         </div>
         <?php if ($st['openN'] > 0): ?>
         <div class="stat-open">
@@ -892,15 +892,17 @@ function render_list(array $items, array $archived = []): string
                         </form>
                     <?php endif; ?>
                 </span>
-                <!-- Archiving sends the group to the end of the list and takes
-                     it out of the statistics. -->
+                <!-- Ticked is the normal state. Unticking archives the group:
+                     it drops to the end of the list and out of the statistics.
+                     The posted value is the archived flag, so it is still the
+                     opposite of where the group is now. -->
                 <form class="inline arch-form" method="post" action="" onclick="event.stopPropagation();">
                     <input type="hidden" name="action" value="set_archived">
                     <input type="hidden" name="group" value="<?= e($rawGroup) ?>">
                     <input type="hidden" name="value" value="<?= $isArch ? '0' : '1' ?>">
-                    <label class="check arch-check" title="Archive this group: send it to the end and leave it out of the statistics">
-                        <input type="checkbox" <?= $isArch ? 'checked' : '' ?>
-                               onchange="submitList(this.form)"> Archived
+                    <label class="check arch-check" title="Untick to set this group aside: it moves to the end and is left out of the statistics">
+                        <input type="checkbox" <?= $isArch ? '' : 'checked' ?>
+                               onchange="submitList(this.form)"> Active
                     </label>
                 </form>
             </summary>

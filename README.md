@@ -35,17 +35,18 @@ Items sharing
 the same status keep the order they were added in, and changing an item's
 status re-sorts it into place.
 
-## Archived groups
+## Active and inactive groups
 
-Each group header has an **Archived** tick box. Archiving a group moves it
-below every other group and leaves its items out of the overall statistics —
-the panel counts them separately as *N archived (excluded)*, the same way it
-treats SKIPPED items. The group itself still works normally: you can open it,
-edit its items and move items in or out.
+Each group header has an **Active** tick box, ticked by default. Unticking it
+sets the group aside: it drops below every other group and its items are left
+out of the overall statistics — the panel counts them separately as
+*N inactive (excluded)*, the same way it treats SKIPPED items. The group
+itself still works normally: you can open it, edit its items and move items in
+or out; tick the box again to bring it back.
 
-The archived group names live in the data file under `archived`, so the state
-belongs to the list rather than to one browser, and renaming a group carries
-its archived flag across.
+The set-aside group names live in the data file under `archived`, so the
+state belongs to the list rather than to one browser, and renaming a group
+carries the flag across.
 
 ## Sorting a panel
 
