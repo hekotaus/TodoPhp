@@ -969,16 +969,6 @@ function render_list(array $items, array $archived = []): string
     $groups  = existing_groups($items);
     $buckets = group_items($items, $archived);
 
-    // The Due column shows in every group as soon as one task anywhere in the
-    // list has a due date, so a date can be set on any row; with none, the
-    // column stays out of the way entirely.
-    $hasDue = false;
-    foreach ($items as $x) {
-        if ($x['due'] !== '') {
-            $hasDue = true;
-            break;
-        }
-    }
     ob_start(); ?>
     <?php if (empty($items)): ?>
         <p class="empty">No items yet. Add your first one above.</p>
@@ -992,6 +982,9 @@ function render_list(array $items, array $archived = []): string
         </label>
         <label class="check" title="Show when each task was added, or when it was completed">
             <input type="checkbox" id="show-dates"> Show dates
+        </label>
+        <label class="check" title="Show the date each task is due">
+            <input type="checkbox" id="show-due"> Show due
         </label>
         <label class="check" title="Show the Move and Delete controls on each task">
             <input type="checkbox" id="show-controls"> Show task controls
@@ -1047,7 +1040,7 @@ function render_list(array $items, array $archived = []): string
                             <th class="colw-status"><?= sort_link('status', 'Status', 'Sort this group by status') ?></th>
                             <th class="colw-comp"><?= sort_link('completion', 'Completion', 'Sort this group by completion') ?></th>
                             <th class="colw-date"><?= sort_link('date', 'Date', 'Sort this group by date (added, or completed once DONE)') ?></th>
-                            <?php if ($hasDue): ?><th class="colw-due"><?= sort_link('due', 'Due', 'Sort this group by due date') ?></th><?php endif; ?>
+                            <th class="colw-due"><?= sort_link('due', 'Due', 'Sort this group by due date') ?></th>
                             <th class="colw-act"></th>
                         </tr>
                     </thead>
@@ -1108,7 +1101,6 @@ function render_list(array $items, array $archived = []): string
                                 <?php endif; ?>
                             </td>
                             <!-- Due: the day the task is due, if it has one -->
-                            <?php if ($hasDue): ?>
                             <td class="colw-due" data-due="<?= e($it['due']) ?>">
                                 <form class="inline" method="post" action="">
                                     <input type="hidden" name="action" value="update_field">
@@ -1120,7 +1112,6 @@ function render_list(array $items, array $archived = []): string
                                            onchange="submitList(this.form)">
                                 </form>
                             </td>
-                            <?php endif; ?>
                             <!-- Actions: edit the comments, move to another group, delete -->
                             <td class="colw-act">
                                 <div class="row-actions">
@@ -1349,8 +1340,8 @@ function render_list(array $items, array $archived = []): string
     .colw-date { width: 80px; white-space: nowrap; }
     .colw-due { width: 112px; white-space: nowrap; }
     th.colw-date, td.colw-date, th.colw-due, td.colw-due { display: none; }
-    body.show-dates th.colw-date, body.show-dates td.colw-date,
-    body.show-dates th.colw-due, body.show-dates td.colw-due { display: table-cell; }
+    body.show-dates th.colw-date, body.show-dates td.colw-date { display: table-cell; }
+    body.show-due th.colw-due, body.show-due td.colw-due { display: table-cell; }
     .date { font-size: .75rem; color: #6a7280; white-space: nowrap; }
     .date-done { color: #256b34; }
     .date-due { color: #4a5468; }
@@ -1846,6 +1837,7 @@ function initFilter() {
 var COLUMN_TOGGLES = [
     { id: 'show-completion', key: 'todo-show-completion', cls: 'show-completion' },
     { id: 'show-dates',      key: 'todo-show-dates',      cls: 'show-dates' },
+    { id: 'show-due',        key: 'todo-show-due',        cls: 'show-due' },
     { id: 'show-controls',   key: 'todo-show-controls',   cls: 'show-controls' }
 ];
 

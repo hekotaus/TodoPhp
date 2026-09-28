@@ -97,18 +97,17 @@ dates** tick box in the toolbar reveals a *Date* column:
 
 A task can also be given a **due date** when it is added — the *Due* field in
 the add panel, which is optional. It appears in its own *Due* column beside
-the *Date* one, under the same tick box, and the column sorts like the others
-(tasks with no due date go last either way). The column appears in every group
-as soon as one task anywhere in the list has a due date, so a date can be set
-on any row; while the list has none at all there is no *Due* column and the
-width goes to the task names instead. A due date is a day on a
-calendar, so it is stored and shown as plain YYYY-MM-DD with no timezone
-attached.
+the *Date* one, with its own **Show due** tick box in the toolbar, and the
+column sorts like the others (tasks with no due date go last either way). The tick box is the only
+thing that decides whether the column is shown, so every row offers somewhere
+to put a date, whether or not anything in the list has one yet. A due date is
+a day on a calendar, so it is stored and shown as plain YYYY-MM-DD with no
+timezone attached.
 
 **A near due date makes a task urgent.** A task that is still only **UNDONE**
 or **PENDING** is moved to **URGENT** once its due date is less than five days
 away, overdue ones included. PROGRESS and DEPENDANT are left alone (they say
-something the due date shouldn'''t overwrite), as are DONE and SKIPPED. The rule
+something the due date shouldn't overwrite), as are DONE and SKIPPED. The rule
 is applied when the page is loaded and after every change, so a task becomes
 urgent on its own as the date approaches; the change is written to the data
 file. It is one-way: moving such a task back to PENDING or UNDONE by hand
@@ -125,8 +124,7 @@ timestamps; edit the line in the file (or the constant) to change it.
 
 Click a due date in the list to change it, the same as any other field: the
 cell is a date field that reads as plain text until you point at it, and it
-saves when you pick a date. Clearing the field removes the due date; once the
-last one in the whole list is gone, the column goes with it.
+saves when you pick a date. Clearing the field removes the due date.
 
 Hovering a date shows the full timestamp. Dates are stored as an absolute
 instant (ISO-8601 with the UTC offset) and displayed in the timezone of
