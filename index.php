@@ -793,6 +793,9 @@ function render_list(array $items): string
     <div class="toolbar">
         <button type="button" id="expand-all">Expand all</button>
         <button type="button" id="collapse-all">Collapse all</button>
+        <label class="check" title="Show the Move and Delete controls on each task">
+            <input type="checkbox" id="show-controls"> Show task controls
+        </label>
         <label class="check" title="Show each task's completion">
             <input type="checkbox" id="show-completion"> Show completion
         </label>
@@ -1085,6 +1088,8 @@ function render_list(array $items): string
     .colw-act { width: 150px; }
 
     /* Columns each tick box can hide */
+    th.colw-act, td.colw-act { display: none; }
+    body.show-controls th.colw-act, body.show-controls td.colw-act { display: table-cell; }
     th.colw-comp, td.colw-comp { display: none; }
     body.show-completion th.colw-comp, body.show-completion td.colw-comp { display: table-cell; }
     .colw-date { width: 80px; white-space: nowrap; }
@@ -1533,6 +1538,7 @@ function initFilter() {
 // on <body> for the CSS to match. Ticked unless the user says otherwise, and
 // the choice is remembered per browser.
 var COLUMN_TOGGLES = [
+    { id: 'show-controls',   key: 'todo-show-controls',   cls: 'show-controls' },
     { id: 'show-completion', key: 'todo-show-completion', cls: 'show-completion' },
     { id: 'show-dates',      key: 'todo-show-dates',      cls: 'show-dates' }
 ];

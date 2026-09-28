@@ -104,6 +104,8 @@ Everything is edited directly in the row — no separate edit page:
 - **Move** — the *Move…* dropdown at the end of each row reassigns the item to
   another group. It lists the other existing groups, an *Ungrouped* option, and
   *＋ New group…* (which prompts for a new group name).
+- The **Show task controls** tick box in the toolbar hides the *Move…* and
+  *Delete* controls, for when you are reading the list rather than changing it.
 
 Each change is saved to the data file right away.
 
