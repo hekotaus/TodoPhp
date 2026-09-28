@@ -11,6 +11,12 @@ declare(strict_types=1);
  * fold/unfold, and item fields (task, status, completion, group) are edited
  * inline. Collapse state is remembered per browser via localStorage.
  *
+ * Edits are applied in place: the change is POSTed in the background, the JSON
+ * file is written, and the answer carries the re-rendered list and stats, which
+ * the page swaps in. So the file and the page both end up current without a
+ * reload and without reading the file back. A POST without the "ajax" flag
+ * still redirects the old way, so the app works with JavaScript disabled.
+ *
  * Run with PHP's built-in server:
  *     php -S localhost:8000
  * then open http://localhost:8000 in your browser.
@@ -472,6 +478,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
 
+    // Background edit from the page: answer with the re-rendered fragments
+    // instead of redirecting. They are built from the items still in memory —
+    // exactly what was just written — so the data file is not read back, and
+    // the browser patches the page in place rather than reloading it. Only the
+    // list actions qualify; the file actions change which file is shown and
+    // still go through a normal submit and full load.
+    if (($_POST['ajax'] ?? '') === '1'
+        && in_array($action, ['add', 'update_field', 'delete', 'rename_group', 'rename_list'], true)) {
+        header('Content-Type: application/json');
+        header('Cache-Control: no-store');
+        echo json_encode([
+            'ok'     => true,
+            'list'   => render_list($items),
+            'stats'  => render_stats($items),
+            'groups' => render_group_options($items),
+            'name'   => $listName,
+            'sig'    => file_signature(),   // now ours, so the poll stays quiet
+        ]);
+        exit;
+    }
+
     // Redirect back including the active file in the URL, so a later refresh
     // reads the current file even if cookies aren't available.
     header('Location: ' . strtok($_SERVER['REQUEST_URI'], '?') . '?file=' . rawurlencode($activeFile));
@@ -484,29 +511,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 $data     = load_data();
 $listName = $data['name'];
 $items    = $data['items'];
-$groups   = existing_groups($items);
-$buckets  = group_items($items);
 
 // Sticky defaults for the add form (kept from the last added item).
 $addGroup  = clean_group($_COOKIE['add_group'] ?? '');
 $addStatus = clean_status($_COOKIE['add_status'] ?? 'PENDING');
-
-// Overall completion stats — SKIPPED items are excluded from the calculation.
-$counted  = array_values(array_filter($items, static fn($i) => ($i['status'] ?? '') !== 'SKIPPED'));
-$countedN = count($counted);
-$skippedN = count($items) - $countedN;
-$overall  = $countedN
-    ? (int) round(array_sum(array_map(static fn($i) => (int) $i['completion'], $counted)) / $countedN)
-    : 0;
-$doneN    = count(array_filter($counted, static fn($i) => (int) $i['completion'] === 100));
-
-// Outstanding work: every non-DONE, non-SKIPPED item, plus a per-status tally
-// so it is clear what the remaining tasks are waiting on.
-$openByStatus = [];
-foreach (OPEN_STATUSES as $s) {
-    $openByStatus[$s] = count(array_filter($items, static fn($i) => ($i['status'] ?? '') === $s));
-}
-$openN = array_sum($openByStatus);
 
 // Data-file change signature at render time, for the auto-refresh poll.
 $fileSig = file_signature();
@@ -558,6 +566,202 @@ function move_options(string $currentGroup, array $allGroups): string
     }
     $out .= '<option value="__new__">&#43; New group&hellip;</option>';
     return $out;
+}
+
+/**
+ * Overall figures for the stats panel. SKIPPED items are left out of the
+ * completion average; OPEN_STATUSES are tallied as outstanding work.
+ */
+function compute_stats(array $items): array
+{
+    $counted  = array_values(array_filter($items, static fn($i) => ($i['status'] ?? '') !== 'SKIPPED'));
+    $countedN = count($counted);
+
+    $open = [];
+    foreach (OPEN_STATUSES as $s) {
+        $open[$s] = count(array_filter($items, static fn($i) => ($i['status'] ?? '') === $s));
+    }
+
+    return [
+        'countedN' => $countedN,
+        'skippedN' => count($items) - $countedN,
+        'overall'  => $countedN
+            ? (int) round(array_sum(array_map(static fn($i) => (int) $i['completion'], $counted)) / $countedN)
+            : 0,
+        'doneN'    => count(array_filter($counted, static fn($i) => (int) $i['completion'] === 100)),
+        'open'     => $open,
+        'openN'    => array_sum($open),
+    ];
+}
+
+// ---------------------------------------------------------------------------
+// The fragments below are rendered from an items array rather than from the
+// data file, so the same code serves a full page load and the answer to a
+// background edit (see the AJAX branch of the POST handler).
+// ---------------------------------------------------------------------------
+
+/** Stats panel; empty string when there is nothing to report. */
+function render_stats(array $items): string
+{
+    if (empty($items)) {
+        return '';
+    }
+    $st = compute_stats($items);
+    ob_start(); ?>
+    <div class="stats">
+        <div class="stat-figure">
+            <span class="stat-pct"><?= $st['overall'] ?>%</span>
+            <span class="stat-label">overall completion</span>
+        </div>
+        <div class="stat-bar bar"><span style="width: <?= $st['overall'] ?>%;"></span></div>
+        <div class="stat-meta">
+            <?= $st['countedN'] ?> task<?= $st['countedN'] === 1 ? '' : 's' ?>
+            · <?= $st['doneN'] ?> done
+            · <?= $st['openN'] ?> uncompleted
+            <?php if ($st['skippedN'] > 0): ?>· <?= $st['skippedN'] ?> skipped (excluded)<?php endif; ?>
+        </div>
+        <?php if ($st['openN'] > 0): ?>
+        <div class="stat-open">
+            <?php foreach ($st['open'] as $s => $n): ?>
+                <?php if ($n > 0): ?>
+                    <span class="open-chip <?= e($s) ?>"><?= e($s) ?> <b><?= $n ?></b></span>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
+    </div>
+    <?php return (string) ob_get_clean();
+}
+
+/** <option>s for the group-name autocomplete list. */
+function render_group_options(array $items): string
+{
+    $out = '';
+    foreach (existing_groups($items) as $g) {
+        $out .= '<option value="' . e($g) . '"></option>';
+    }
+    return $out;
+}
+
+/** The toolbar, the grouped item tables and the item-count footer. */
+function render_list(array $items): string
+{
+    $items   = array_values($items);
+    $groups  = existing_groups($items);
+    $buckets = group_items($items);
+    ob_start(); ?>
+    <?php if (empty($items)): ?>
+        <p class="empty">No items yet. Add your first one above.</p>
+    <?php else: ?>
+
+    <div class="toolbar">
+        <button type="button" id="expand-all">Expand all</button>
+        <button type="button" id="collapse-all">Collapse all</button>
+        <button type="button" id="undone-only" class="toggle" aria-pressed="false"
+                title="Hide DONE and SKIPPED items">Undone only</button>
+    </div>
+
+    <div class="groups">
+    <?php foreach ($buckets as $groupName => $groupItems): ?>
+        <?php $gp = group_progress($groupItems); ?>
+        <details class="group" data-group="<?= e($groupName) ?>" open>
+            <summary>
+                <span class="caret">&#9654;</span>
+                <span class="gname"><?= e($groupName) ?></span>
+                <span class="count"><?= count($groupItems) ?> item<?= count($groupItems) === 1 ? '' : 's' ?></span>
+                <span class="gbar">
+                    <span class="bar sm"><span style="width: <?= $gp ?>%;"></span></span>
+                    <span class="count"><?= $gp ?>%</span>
+                    <?php if ($groupName !== UNGROUPED): ?>
+                        <form class="inline" method="post" action=""
+                              onsubmit="var t=prompt('Rename group “<?= e($groupName) ?>” to:', '<?= e($groupName) ?>'); if(t===null){return false;} this.to.value=t; return true;">
+                            <input type="hidden" name="action" value="rename_group">
+                            <input type="hidden" name="from" value="<?= e($groupName) ?>">
+                            <input type="hidden" name="to" value="">
+                            <button class="rename" type="submit" onclick="event.stopPropagation();">rename</button>
+                        </form>
+                    <?php endif; ?>
+                </span>
+            </summary>
+            <div class="group-body">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th class="colw-status">Status</th>
+                            <th class="colw-comp">Completion</th>
+                            <th class="colw-act"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    <?php foreach ($groupItems as $it): ?>
+                        <tr data-status="<?= e($it['status']) ?>" class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
+                            <!-- Task: inline edit, saves on blur/Enter -->
+                            <td>
+                                <form class="inline" method="post" action="" style="display:block;">
+                                    <input type="hidden" name="action" value="update_field">
+                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                    <input type="hidden" name="field" value="task">
+                                    <input class="edit-name" name="value" value="<?= e($it['task']) ?>"
+                                           onchange="submitList(this.form)"
+                                           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                                </form>
+                            </td>
+                            <!-- Status: inline select, saves on change -->
+                            <td class="colw-status">
+                                <form class="inline" method="post" action="">
+                                    <input type="hidden" name="action" value="update_field">
+                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                    <input type="hidden" name="field" value="status">
+                                    <select class="status <?= e($it['status']) ?>" name="value" onchange="submitList(this.form)">
+                                        <?= status_options($it['status']) ?>
+                                    </select>
+                                </form>
+                            </td>
+                            <!-- Completion: inline number, saves on change -->
+                            <td class="colw-comp">
+                                <div class="comp-cell">
+                                    <form class="inline" method="post" action="">
+                                        <input type="hidden" name="action" value="update_field">
+                                        <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                        <input type="hidden" name="field" value="completion">
+                                        <input type="number" name="value" min="0" max="100" step="1"
+                                               value="<?= (int) $it['completion'] ?>" onchange="submitList(this.form)">
+                                    </form>
+                                    <span class="bar"><span style="width: <?= (int) $it['completion'] ?>%;"></span></span>
+                                </div>
+                            </td>
+                            <!-- Actions: move to another group + delete -->
+                            <td class="colw-act">
+                                <div class="row-actions">
+                                    <form class="inline move-form" method="post" action="">
+                                        <input type="hidden" name="action" value="update_field">
+                                        <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                        <input type="hidden" name="field" value="group">
+                                        <input type="hidden" name="value" value="">
+                                        <select class="move-select" onchange="moveItem(this)" title="Move to another group">
+                                            <?= move_options($it['group'], $groups) ?>
+                                        </select>
+                                    </form>
+                                    <form class="inline" method="post" action="" onsubmit="return confirm('Delete this item?');">
+                                        <input type="hidden" name="action" value="delete">
+                                        <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                        <button class="del" type="submit">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        </details>
+    <?php endforeach; ?>
+    </div>
+
+    <p class="muted"><?= count($items) ?> item<?= count($items) === 1 ? '' : 's' ?> in <?= count($buckets) ?> group<?= count($buckets) === 1 ? '' : 's' ?>. Data stored in <?= e(basename(DATA_FILE)) ?>.</p>
+    <?php endif; ?>
+    <?php return (string) ob_get_clean();
 }
 ?>
 <!DOCTYPE html>
@@ -776,7 +980,9 @@ function move_options(string $currentGroup, array $allGroups): string
     /* Add form + stats side by side, equal width */
     .top-row { display: flex; flex-wrap: wrap; align-items: stretch; gap: 1rem; margin-bottom: 1.5rem; }
     .top-row > .add-form { flex: 1 1 0; min-width: 280px; margin-bottom: 0; }
-    .top-row > .stats { flex: 1 1 0; min-width: 280px; margin-bottom: 0; }
+    .top-row > .stats-slot { flex: 1 1 0; min-width: 280px; display: flex; }
+    .top-row > .stats-slot:empty { display: none; }
+    .stats-slot > .stats { flex: 1 1 100%; margin-bottom: 0; }
 
     /* Overall completion stat panel */
     .stats {
@@ -814,7 +1020,7 @@ function move_options(string $currentGroup, array $allGroups): string
         <input type="hidden" name="action" value="rename_list">
         <input class="list-title" name="value" value="<?= e($listName) ?>"
                aria-label="List name" title="Click to rename this list"
-               onchange="this.form.submit()"
+               onchange="submitList(this.form)"
                onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
     </form>
 
@@ -873,153 +1079,132 @@ function move_options(string $currentGroup, array $allGroups): string
         <button class="primary" type="submit">Add item</button>
     </form>
 
-    <?php if (!empty($items)): ?>
-    <!-- Overall completion stats -->
-    <div class="stats">
-        <div class="stat-figure">
-            <span class="stat-pct"><?= $overall ?>%</span>
-            <span class="stat-label">overall completion</span>
-        </div>
-        <div class="stat-bar bar"><span style="width: <?= $overall ?>%;"></span></div>
-        <div class="stat-meta">
-            <?= $countedN ?> task<?= $countedN === 1 ? '' : 's' ?>
-            · <?= $doneN ?> done
-            · <?= $openN ?> uncompleted
-            <?php if ($skippedN > 0): ?>· <?= $skippedN ?> skipped (excluded)<?php endif; ?>
-        </div>
-        <?php if ($openN > 0): ?>
-        <div class="stat-open">
-            <?php foreach ($openByStatus as $s => $n): ?>
-                <?php if ($n > 0): ?>
-                    <span class="open-chip <?= e($s) ?>"><?= e($s) ?> <b><?= $n ?></b></span>
-                <?php endif; ?>
-            <?php endforeach; ?>
-        </div>
-        <?php endif; ?>
-    </div>
-    <?php endif; ?>
+    <!-- Overall completion stats (replaced in place after an edit) -->
+    <div id="stats-slot" class="stats-slot"><?= render_stats($items) ?></div>
 </div>
 
 <!-- Autocomplete list of existing group names (used by add + move) -->
-<datalist id="group-list">
-    <?php foreach ($groups as $g): ?>
-        <option value="<?= e($g) ?>"></option>
-    <?php endforeach; ?>
-</datalist>
+<datalist id="group-list"><?= render_group_options($items) ?></datalist>
 
-<?php if (empty($items)): ?>
-    <p class="empty">No items yet. Add your first one above.</p>
-<?php else: ?>
-
-<div class="toolbar">
-    <button type="button" id="expand-all">Expand all</button>
-    <button type="button" id="collapse-all">Collapse all</button>
-    <button type="button" id="undone-only" class="toggle" aria-pressed="false"
-            title="Hide DONE and SKIPPED items">Undone only</button>
-</div>
-
-<div class="groups">
-<?php foreach ($buckets as $groupName => $groupItems): ?>
-    <?php $gp = group_progress($groupItems); ?>
-    <details class="group" data-group="<?= e($groupName) ?>" open>
-        <summary>
-            <span class="caret">&#9654;</span>
-            <span class="gname"><?= e($groupName) ?></span>
-            <span class="count"><?= count($groupItems) ?> item<?= count($groupItems) === 1 ? '' : 's' ?></span>
-            <span class="gbar">
-                <span class="bar sm"><span style="width: <?= $gp ?>%;"></span></span>
-                <span class="count"><?= $gp ?>%</span>
-                <?php if ($groupName !== UNGROUPED): ?>
-                    <form class="inline" method="post" action=""
-                          onsubmit="var t=prompt('Rename group “<?= e($groupName) ?>” to:', '<?= e($groupName) ?>'); if(t===null){return false;} this.to.value=t; return true;">
-                        <input type="hidden" name="action" value="rename_group">
-                        <input type="hidden" name="from" value="<?= e($groupName) ?>">
-                        <input type="hidden" name="to" value="">
-                        <button class="rename" type="submit" onclick="event.stopPropagation();">rename</button>
-                    </form>
-                <?php endif; ?>
-            </span>
-        </summary>
-        <div class="group-body">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Task</th>
-                        <th class="colw-status">Status</th>
-                        <th class="colw-comp">Completion</th>
-                        <th class="colw-act"></th>
-                    </tr>
-                </thead>
-                <tbody>
-                <?php foreach ($groupItems as $it): ?>
-                    <tr data-status="<?= e($it['status']) ?>" class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
-                        <!-- Task: inline edit, submits on blur/Enter -->
-                        <td>
-                            <form class="inline" method="post" action="" style="display:block;">
-                                <input type="hidden" name="action" value="update_field">
-                                <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                <input type="hidden" name="field" value="task">
-                                <input class="edit-name" name="value" value="<?= e($it['task']) ?>"
-                                       onchange="this.form.submit()"
-                                       onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-                            </form>
-                        </td>
-                        <!-- Status: inline select, submits on change -->
-                        <td class="colw-status">
-                            <form class="inline" method="post" action="">
-                                <input type="hidden" name="action" value="update_field">
-                                <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                <input type="hidden" name="field" value="status">
-                                <select class="status <?= e($it['status']) ?>" name="value" onchange="this.form.submit()">
-                                    <?= status_options($it['status']) ?>
-                                </select>
-                            </form>
-                        </td>
-                        <!-- Completion: inline number, submits on change -->
-                        <td class="colw-comp">
-                            <div class="comp-cell">
-                                <form class="inline" method="post" action="">
-                                    <input type="hidden" name="action" value="update_field">
-                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                    <input type="hidden" name="field" value="completion">
-                                    <input type="number" name="value" min="0" max="100" step="1"
-                                           value="<?= (int) $it['completion'] ?>" onchange="this.form.submit()">
-                                </form>
-                                <span class="bar"><span style="width: <?= (int) $it['completion'] ?>%;"></span></span>
-                            </div>
-                        </td>
-                        <!-- Actions: move to another group + delete -->
-                        <td class="colw-act">
-                            <div class="row-actions">
-                                <form class="inline move-form" method="post" action="">
-                                    <input type="hidden" name="action" value="update_field">
-                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                    <input type="hidden" name="field" value="group">
-                                    <input type="hidden" name="value" value="">
-                                    <select class="move-select" onchange="moveItem(this)" title="Move to another group">
-                                        <?= move_options($it['group'], $groups) ?>
-                                    </select>
-                                </form>
-                                <form class="inline" method="post" action="" onsubmit="return confirm('Delete this item?');">
-                                    <input type="hidden" name="action" value="delete">
-                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                    <button class="del" type="submit">Delete</button>
-                                </form>
-                            </div>
-                        </td>
-                    </tr>
-                <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-    </details>
-<?php endforeach; ?>
-</div>
-
-<p class="muted"><?= count($items) ?> item<?= count($items) === 1 ? '' : 's' ?> in <?= count($buckets) ?> group<?= count($buckets) === 1 ? '' : 's' ?>. Data stored in <?= e(basename(DATA_FILE)) ?>.</p>
-<?php endif; ?>
+<!-- The list itself (replaced in place after an edit) -->
+<div id="list-slot"><?= render_list($items) ?></div>
 
 <script>
+// ---------------------------------------------------------------------------
+// Editing is done in place. A change to the list is POSTed in the background;
+// the server writes the JSON file and answers with the re-rendered list and
+// stats, which are swapped into the slots below. So both the file and the page
+// end up updated, without reloading the page or re-reading the file. The poll
+// at the bottom still reloads — but only when someone *else* changes the file.
+// ---------------------------------------------------------------------------
+
+// Actions that only change list contents, and so can be applied in place. File
+// actions (select / upload / delete file) submit normally and reload the page.
+var LIST_ACTIONS = ['add', 'update_field', 'delete', 'rename_group', 'rename_list'];
+
+// Signature of the data file as the page currently shows it, and the file the
+// page is bound to. Both are kept current by applyUpdate().
+var pollSig  = { mtime: <?= (int) $fileSig['mtime'] ?>, size: <?= (int) $fileSig['size'] ?> };
+var pollFile = <?= json_encode($currentFile, JSON_UNESCAPED_SLASHES) ?>;
+
+// Only the newest background edit may repaint: a slower earlier response would
+// otherwise overwrite the page with a stale list.
+var editSeq = 0;
+
+/** The action a form performs, from its hidden "action" field. */
+function formAction(form) {
+    var a = form ? form.querySelector('input[name="action"]') : null;
+    return a ? a.value : '';
+}
+
+/**
+ * Save a list change and repaint from the answer. Called by the inline
+ * onchange handlers and by the submit hook below.
+ */
+function submitList(form) {
+    if (!form) { return; }
+    var body = new FormData(form);
+    body.append('ajax', '1');          // ask for fragments instead of a redirect
+    var mine  = ++editSeq;
+    var focus = focusKey(document.activeElement);
+    var isAdd = formAction(form) === 'add';
+    var taskInput = isAdd ? form.querySelector('input[name="task"]') : null;
+
+    fetch(window.location.href, {
+        method: 'POST',
+        body: body,
+        cache: 'no-store',
+        headers: { 'X-Requested-With': 'fetch' }
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || !d.ok) { throw new Error('unexpected response'); }
+            if (mine !== editSeq) { return; }   // a later edit already repainted
+            applyUpdate(d, focus);
+            if (taskInput) {                    // ready for the next item
+                taskInput.value = '';
+                taskInput.focus();
+            }
+        })
+        .catch(function () {
+            // The write may or may not have landed; a reload shows the truth.
+            window.location.reload();
+        });
+}
+
+/** Swap in the new fragments and put the page back the way the user had it. */
+function applyUpdate(d, focus) {
+    var list  = document.getElementById('list-slot');
+    var stats = document.getElementById('stats-slot');
+    var dl    = document.getElementById('group-list');
+    if (list)  { list.innerHTML  = d.list; }
+    if (stats) { stats.innerHTML = d.stats; }
+    if (dl)    { dl.innerHTML    = d.groups; }
+    if (d.name) { document.title = d.name; }
+    initList();
+    restoreFocus(focus);
+    // The file on disk is now exactly what the page shows: adopt its signature
+    // so the poll doesn't mistake our own write for an outside change.
+    if (d.sig) { pollSig = d.sig; }
+}
+
+/** Identify the field being edited, so focus survives the swap. */
+function focusKey(el) {
+    var form = el && el.form;
+    if (!form) { return null; }
+    var id = form.querySelector('input[name="id"]');
+    var fd = form.querySelector('input[name="field"]');
+    // Group moves re-sort the row; leave focus alone for those.
+    if (!id || !fd || fd.value === 'group') { return null; }
+    return { id: id.value, field: fd.value };
+}
+
+/** Re-focus the control focusKey() recorded, now that the row is a new one. */
+function restoreFocus(key) {
+    if (!key) { return; }
+    var forms = document.querySelectorAll('#list-slot form.inline');
+    for (var i = 0; i < forms.length; i++) {
+        var id = forms[i].querySelector('input[name="id"]');
+        var fd = forms[i].querySelector('input[name="field"]');
+        if (id && fd && id.value === key.id && fd.value === key.field) {
+            var c = forms[i].querySelector('input:not([type=hidden]), select');
+            if (c) { c.focus(); }
+            return;
+        }
+    }
+}
+
+// Forms submitted by a button (add, delete, rename group) go the same way.
+// Inline onsubmit handlers — the delete confirm, the rename prompt — have
+// already run and cancelled the event if the user backed out.
+document.addEventListener('submit', function (ev) {
+    var form = ev.target;
+    if (!form || form.tagName !== 'FORM') { return; }
+    if (LIST_ACTIONS.indexOf(formAction(form)) === -1) { return; }
+    ev.preventDefault();
+    submitList(form);
+});
+
 // Switch the active data file to the one chosen in the dropdown.
 function selectFile(sel) {
     var form = sel.form;
@@ -1037,7 +1222,7 @@ function newFile(btn) {
 }
 
 // Move an item to another group. Handles the "Ungrouped" and
-// "New group…" sentinel options, then submits the row's move form.
+// "New group…" sentinel options, then saves the row's move form.
 function moveItem(sel) {
     var v = sel.value;
     if (v === '') { return; }
@@ -1050,10 +1235,10 @@ function moveItem(sel) {
         v = '';
     }
     form.querySelector('input[name="value"]').value = v;
-    form.submit();
+    submitList(form);
 }
 
-// After a reload, browsers restore the previous values of form controls, which
+// Browsers restore the previous values of form controls across a reload, which
 // would show a stale status/task/completion (e.g. the status chip recolours but
 // the dropdown text stays old). Force every row control back to its
 // server-rendered value so the page always reflects the file on disk.
@@ -1070,53 +1255,55 @@ function resetRowControls() {
         }
     });
 }
-resetRowControls();
 window.addEventListener('pageshow', resetRowControls);
 
 // Latching "Undone only" filter: hide DONE/SKIPPED rows and any group left
-// empty by the filter. State persists (per browser) across reloads.
-(function () {
-    var KEY = 'todo-undone-only';
-    var btn = document.getElementById('undone-only');
-    if (!btn) return;
+// empty by the filter. State persists (per browser) across reloads and edits.
+var UNDONE_KEY = 'todo-undone-only';
 
-    function apply(on) {
-        document.body.classList.toggle('undone-only', on);
+function undoneOnlyOn() {
+    try { return localStorage.getItem(UNDONE_KEY) === '1'; } catch (e) { return false; }
+}
+
+function applyUndoneOnly(on) {
+    var btn = document.getElementById('undone-only');
+    document.body.classList.toggle('undone-only', on);
+    if (btn) {
         btn.classList.toggle('pressed', on);
         btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        // Hide groups that have no remaining (non-DONE/SKIPPED) items.
-        document.querySelectorAll('details.group').forEach(function (d) {
-            if (!on) { d.style.display = ''; return; }
-            var visible = 0;
-            d.querySelectorAll('tbody tr').forEach(function (r) {
-                var s = r.getAttribute('data-status');
-                if (s !== 'DONE' && s !== 'SKIPPED') visible++;
-            });
-            d.style.display = visible ? '' : 'none';
+    }
+    // Hide groups that have no remaining (non-DONE/SKIPPED) items.
+    document.querySelectorAll('details.group').forEach(function (d) {
+        if (!on) { d.style.display = ''; return; }
+        var visible = 0;
+        d.querySelectorAll('tbody tr').forEach(function (r) {
+            var s = r.getAttribute('data-status');
+            if (s !== 'DONE' && s !== 'SKIPPED') visible++;
         });
-    }
-
-    var on = false;
-    try { on = localStorage.getItem(KEY) === '1'; } catch (e) {}
-    apply(on);
-
-    btn.addEventListener('click', function () {
-        on = !document.body.classList.contains('undone-only');
-        try { localStorage.setItem(KEY, on ? '1' : '0'); } catch (e) {}
-        apply(on);
+        d.style.display = visible ? '' : 'none';
     });
-})();
+}
 
-(function () {
-    // Remember which groups are collapsed, per browser.
-    var KEY = 'todo-collapsed-groups';
-    function load() {
-        try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+function initFilter() {
+    var btn = document.getElementById('undone-only');
+    applyUndoneOnly(undoneOnlyOn());
+    if (!btn) { return; }
+    btn.addEventListener('click', function () {
+        var on = !document.body.classList.contains('undone-only');
+        try { localStorage.setItem(UNDONE_KEY, on ? '1' : '0'); } catch (e) {}
+        applyUndoneOnly(on);
+    });
+}
+
+// Remember which groups are collapsed, per browser.
+var COLLAPSE_KEY = 'todo-collapsed-groups';
+
+function initCollapse() {
+    var state;
+    try { state = JSON.parse(localStorage.getItem(COLLAPSE_KEY)) || {}; } catch (e) { state = {}; }
+    function save() {
+        try { localStorage.setItem(COLLAPSE_KEY, JSON.stringify(state)); } catch (e) {}
     }
-    function save(state) {
-        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
-    }
-    var state = load();
     var groups = Array.prototype.slice.call(document.querySelectorAll('details.group'));
 
     groups.forEach(function (d) {
@@ -1126,7 +1313,7 @@ window.addEventListener('pageshow', resetRowControls);
         }
         d.addEventListener('toggle', function () {
             state[name] = d.open;
-            save(state);
+            save();
         });
     });
 
@@ -1135,21 +1322,29 @@ window.addEventListener('pageshow', resetRowControls);
             d.open = open;
             state[d.getAttribute('data-group')] = open;
         });
-        save(state);
+        save();
     }
     var ea = document.getElementById('expand-all');
     var ca = document.getElementById('collapse-all');
     if (ea) ea.addEventListener('click', function () { setAll(true); });
     if (ca) ca.addEventListener('click', function () { setAll(false); });
-})();
+}
+
+// Run for the page as loaded, and again for every list the server sends back
+// (the swap discards the elements these handlers were attached to).
+function initList() {
+    resetRowControls();
+    initCollapse();
+    initFilter();
+}
+initList();
 
 // Auto-refresh: poll the data file's change signature and reload if it changed
-// on disk (e.g. edited in another tab or by another process). Skips reloading
-// while you're editing a field so it never interrupts typing.
+// on disk behind our back (another tab, another process). Our own edits keep
+// pollSig current, so they never trigger this. Skips reloading while you're
+// editing a field so it never interrupts typing.
 (function () {
-    var current = { mtime: <?= (int) $fileSig['mtime'] ?>, size: <?= (int) $fileSig['size'] ?> };
-    var file = <?= json_encode($currentFile, JSON_UNESCAPED_SLASHES) ?>;
-    var url = '?poll=1&file=' + encodeURIComponent(file);
+    var url = '?poll=1&file=' + encodeURIComponent(pollFile);
 
     function editing() {
         var a = document.activeElement;
@@ -1162,7 +1357,7 @@ window.addEventListener('pageshow', resetRowControls);
             .then(function (r) { return r.json(); })
             .then(function (d) {
                 if (!d) return;
-                if (d.mtime !== current.mtime || d.size !== current.size) {
+                if (d.mtime !== pollSig.mtime || d.size !== pollSig.size) {
                     if (editing()) return;   // try again next tick, don't clobber edits
                     window.location.reload();
                 }

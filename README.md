@@ -114,6 +114,12 @@ disk.
 
 ## Notes
 
+- Your own edits never reload the page. Each change is sent in the background,
+  written to the data file, and the server sends back the re-rendered list and
+  statistics, which replace those parts of the page in place — the file is not
+  read back to do it. Collapse state, the “Undone only” filter and the field you
+  were in are all kept. (Without JavaScript the old submit-and-reload path still
+  works.)
 - The page auto-refreshes when the data file changes on disk (edited in another
   tab or by another process). It polls a lightweight endpoint every few seconds
   and reloads only when the file's timestamp/size changes — never while you're
