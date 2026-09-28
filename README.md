@@ -95,7 +95,9 @@ Everything is edited directly in the row — no separate edit page:
 - **Name** — click it and type; it saves when you press Enter or click away.
 - **Status** — pick from the coloured dropdown; saves immediately.
 - **Completion** — type a number (0–100); saves immediately. A thin line
-  under the field shows that percentage at a glance.
+  under the field shows that percentage at a glance. The **Show completion**
+  tick box in the toolbar hides the whole column when you don'''t need it
+  (remembered per browser, like **Show dates** next to it).
 - The add form remembers the group and status of the last item you added, so
   adding several to the same group is quick. Switching data file forgets the
   group (the new file has its own groups); the status is kept.

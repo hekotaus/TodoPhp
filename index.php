@@ -793,6 +793,9 @@ function render_list(array $items): string
     <div class="toolbar">
         <button type="button" id="expand-all">Expand all</button>
         <button type="button" id="collapse-all">Collapse all</button>
+        <label class="check" title="Show each task's completion">
+            <input type="checkbox" id="show-completion"> Show completion
+        </label>
         <label class="check" title="Show when each task was added, or when it was completed">
             <input type="checkbox" id="show-dates"> Show dates
         </label>
@@ -1081,7 +1084,9 @@ function render_list(array $items): string
     .colw-comp { width: 86px; }
     .colw-act { width: 150px; }
 
-    /* Date column — present only while "Show dates" is ticked */
+    /* Columns each tick box can hide */
+    th.colw-comp, td.colw-comp { display: none; }
+    body.show-completion th.colw-comp, body.show-completion td.colw-comp { display: table-cell; }
     .colw-date { width: 80px; white-space: nowrap; }
     th.colw-date, td.colw-date { display: none; }
     body.show-dates th.colw-date, body.show-dates td.colw-date { display: table-cell; }
@@ -1524,28 +1529,36 @@ function initFilter() {
 // "Show dates" tick box: reveals the date column (added while a task is still
 // outstanding, completed once it is DONE). Ticked unless the user says
 // otherwise, and the choice persists per browser.
-var DATES_KEY = 'todo-show-dates';
+// Each of these is a tick box that shows or hides a column, by putting a class
+// on <body> for the CSS to match. Ticked unless the user says otherwise, and
+// the choice is remembered per browser.
+var COLUMN_TOGGLES = [
+    { id: 'show-completion', key: 'todo-show-completion', cls: 'show-completion' },
+    { id: 'show-dates',      key: 'todo-show-dates',      cls: 'show-dates' }
+];
 
-function showDatesOn() {
+function toggleIsOn(t) {
     try {
-        var v = localStorage.getItem(DATES_KEY);
+        var v = localStorage.getItem(t.key);
         return v === null ? true : v === '1';
     } catch (e) { return true; }
 }
 
-function applyShowDates(on) {
-    document.body.classList.toggle('show-dates', on);
-    var box = document.getElementById('show-dates');
+function applyToggle(t, on) {
+    document.body.classList.toggle(t.cls, on);
+    var box = document.getElementById(t.id);
     if (box) { box.checked = on; }
 }
 
-function initDates() {
-    applyShowDates(showDatesOn());
-    var box = document.getElementById('show-dates');
-    if (!box) { return; }
-    box.addEventListener('change', function () {
-        try { localStorage.setItem(DATES_KEY, box.checked ? '1' : '0'); } catch (e) {}
-        applyShowDates(box.checked);
+function initToggles() {
+    COLUMN_TOGGLES.forEach(function (t) {
+        applyToggle(t, toggleIsOn(t));
+        var box = document.getElementById(t.id);
+        if (!box) { return; }
+        box.addEventListener('change', function () {
+            try { localStorage.setItem(t.key, box.checked ? '1' : '0'); } catch (e) {}
+            applyToggle(t, box.checked);
+        });
     });
 }
 
@@ -1693,7 +1706,7 @@ function initList() {
     resetRowControls();
     initCollapse();
     initFilter();
-    initDates();
+    initToggles();
     localizeDates();
     initSort();
 }
