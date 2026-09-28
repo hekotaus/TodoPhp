@@ -978,11 +978,15 @@ function render_list(array $items): string
     body.undone-only tr[data-status="DONE"],
     body.undone-only tr[data-status="SKIPPED"] { display: none; }
 
-    .add-form { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
+    .add-form { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; align-items: flex-end; margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 6px; background: #fafafa; }
     .add-form label { display: flex; flex-direction: column; font-size: .8rem; color: #555; gap: .2rem; }
     input[type=text], input[type=number], select { padding: .4rem; border: 1px solid #bbb; border-radius: 4px; font-size: .9rem; background: #fff; }
-    .add-form input[type=text] { min-width: 180px; }
-    .add-form input[name="task"] { min-width: min(360px, 100%); }   /* never wider than the form */
+    .add-form input[type=text] { width: 150px; min-width: 0; }
+    /* Task takes whatever width is left over, which pushes Group, Status and
+       the button to the right-hand end of the row. The rest are kept to what
+       they need, so the row stays unbroken on a narrower panel. */
+    .add-form label.grow { flex: 1 1 180px; }
+    .add-form label.grow input { width: 100%; }
     .add-form label.wide { flex: 1 1 100%; }
     .add-form textarea {
         font: inherit; font-size: .85rem; resize: vertical; min-height: 2.6rem;
@@ -1281,7 +1285,7 @@ function render_list(array $items): string
     <!-- Add form -->
     <form class="add-form" method="post" action="">
         <input type="hidden" name="action" value="add">
-        <label>Task
+        <label class="grow">Task
             <input type="text" name="task" required>
         </label>
         <label>Group
@@ -1291,10 +1295,10 @@ function render_list(array $items): string
         <label>Status
             <select name="status"><?= status_options($addStatus) ?></select>
         </label>
+        <button class="primary" type="submit">Add task</button>
         <label class="wide">Comments
             <textarea name="comment" rows="2" placeholder="(optional) notes about this task"></textarea>
         </label>
-        <button class="primary" type="submit">Add item</button>
     </form>
 
     <!-- Overall completion stats (replaced in place after an edit) -->
