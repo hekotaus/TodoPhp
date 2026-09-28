@@ -853,22 +853,16 @@ function render_list(array $items): string
                         ?>
                         <tr data-status="<?= e($it['status']) ?>" title="<?= e($tip) ?>"
                             class="<?= $it['status'] === 'SKIPPED' ? 'item-skipped' : '' ?>">
-                            <!-- Task: inline edit, saves on blur/Enter. The dot
-                                 in front marks an item with comments (hover the
-                                 row to read them); it is always in the markup so
-                                 the names stay lined up. -->
+                            <!-- Task: inline edit, saves on blur/Enter -->
                             <td>
-                                <div class="task-cell">
-                                    <span class="note-dot<?= $it['comment'] === '' ? ' none' : '' ?>" aria-hidden="true"></span>
-                                    <form class="inline" method="post" action="" style="display:block;">
-                                        <input type="hidden" name="action" value="update_field">
-                                        <input type="hidden" name="id" value="<?= e($it['id']) ?>">
-                                        <input type="hidden" name="field" value="task">
-                                        <input class="edit-name" name="value" value="<?= e($it['task']) ?>"
-                                               onchange="submitList(this.form)"
-                                               onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
-                                    </form>
-                                </div>
+                                <form class="inline" method="post" action="" style="display:block;">
+                                    <input type="hidden" name="action" value="update_field">
+                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                    <input type="hidden" name="field" value="task">
+                                    <input class="edit-name" name="value" value="<?= e($it['task']) ?>"
+                                           onchange="submitList(this.form)"
+                                           onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+                                </form>
                             </td>
                             <!-- Status: inline select, saves on change -->
                             <td class="colw-status">
@@ -1049,11 +1043,6 @@ function render_list(array $items): string
     th .sort[data-dir="asc"]::after  { content: " \25B2"; font-size: .62rem; }
     th .sort[data-dir="desc"]::after { content: " \25BC"; font-size: .62rem; }
 
-    .task-cell { display: flex; align-items: center; gap: .3rem; }
-    .task-cell > form { flex: 1 1 auto; min-width: 0; }
-    .note-dot { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%; background: #5b87d6; }
-    .note-dot.none { background: none; }   /* keeps the names aligned */
-
     /* Inline editable name */
     .edit-name { width: 100%; min-width: 120px; border: 1px solid transparent; background: transparent; border-radius: 4px; padding: .18rem .35rem; font-size: .92rem; }
     .edit-name:hover { border-color: #e0e0e0; }
@@ -1084,12 +1073,19 @@ function render_list(array $items): string
     /* Move and Delete share a width, so the two controls line up down the column.
        76px is what the select needs to show "Move…" next to its arrow; Delete
        would fit in less, but matching widths matter more than a few pixels. */
-    .row-actions .move-select, .row-actions button.del, .row-actions button.note-btn { width: 76px; }
+    .row-actions .move-select, .row-actions button.del, .row-actions button.note-btn { width: 84px; }
     button.note-btn {
-        font-size: .8rem; padding: .12rem .5rem; border-radius: 4px;
+        font-size: .8rem; padding: .12rem .4rem; border-radius: 4px;
         border: 1px solid #c3cbd9; background: #fff; color: #4a5468; cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center; gap: .3rem;
     }
-    button.note-btn.has { border-color: #8fabe0; color: #24509e; }   /* already has notes */
+    /* A task that already has comments says so on its button */
+    button.note-btn.has {
+        border-color: #7d9ede; background: #e9f0fd; color: #1d4ed8; font-weight: 600;
+    }
+    button.note-btn.has::before {
+        content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor;
+    }
 
     /* Comment editor */
     dialog.note-dialog {

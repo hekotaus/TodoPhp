@@ -60,14 +60,14 @@ browser and survives reloads.
 ## Comments
 
 The add panel has a multi-line **Comments** field for notes about the task
-being added. A task that carries comments is marked with a small dot in front
-of its name. Hovering a task row shows a tooltip with its full name (handy
+being added. Hovering a task row shows a tooltip with its full name (handy
 when the column is too narrow for it) and its comments underneath.
 
 The **Comment** button at the start of each row's controls opens an editor
 for that task's comments: type, then **Save** (or **Cancel** to leave them as
-they were). Saving an empty box clears the comments. The button is outlined in
-blue on tasks that already have some, like the dot beside the name.
+they were). Saving an empty box clears the comments. On a task that already
+has comments the button is tinted blue and carries a dot, so you can see at a
+glance which tasks have notes.
 
 ## Dates
 
