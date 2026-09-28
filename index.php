@@ -136,7 +136,7 @@ const UNGROUPED = 'Ungrouped';
 const DATE_FORMAT = 'c';
 
 /** Fields that may be updated inline. */
-const EDITABLE_FIELDS = ['task', 'status', 'completion', 'group', 'comment'];
+const EDITABLE_FIELDS = ['task', 'status', 'completion', 'group', 'comment', 'due'];
 
 /**
  * Default name for a todo list that hasn't been named yet.
@@ -574,6 +574,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         $item['group'] = clean_group($value);
                     } elseif ($field === 'comment') {
                         $item['comment'] = clean_comment($value);
+                    } elseif ($field === 'due') {
+                        $item['due'] = clean_due($value);
                     }
                     break;
                 }
@@ -863,6 +865,17 @@ function render_list(array $items, array $archived = []): string
     $items   = array_values($items);
     $groups  = existing_groups($items);
     $buckets = group_items($items, $archived);
+
+    // The Due column shows in every group as soon as one task anywhere in the
+    // list has a due date, so a date can be set on any row; with none, the
+    // column stays out of the way entirely.
+    $hasDue = false;
+    foreach ($items as $x) {
+        if ($x['due'] !== '') {
+            $hasDue = true;
+            break;
+        }
+    }
     ob_start(); ?>
     <?php if (empty($items)): ?>
         <p class="empty">No items yet. Add your first one above.</p>
@@ -890,14 +903,6 @@ function render_list(array $items, array $archived = []): string
         $gp       = group_progress($groupItems);
         $rawGroup = $groupName === UNGROUPED ? '' : $groupName;
         $isArch   = is_archived($rawGroup, $archived);
-        // The Due column only earns its width in a group that uses due dates.
-        $hasDue   = false;
-        foreach ($groupItems as $x) {
-            if ($x['due'] !== '') {
-                $hasDue = true;
-                break;
-            }
-        }
         ?>
         <details class="group<?= $isArch ? ' archived' : '' ?>" data-group="<?= e($groupName) ?>" open>
             <summary>
@@ -1002,9 +1007,15 @@ function render_list(array $items, array $archived = []): string
                             <!-- Due: the day the task is due, if it has one -->
                             <?php if ($hasDue): ?>
                             <td class="colw-due" data-due="<?= e($it['due']) ?>">
-                                <?php if ($it['due'] !== ''): ?>
-                                    <span class="date date-due"><?= e($it['due']) ?></span>
-                                <?php endif; ?>
+                                <form class="inline" method="post" action="">
+                                    <input type="hidden" name="action" value="update_field">
+                                    <input type="hidden" name="id" value="<?= e($it['id']) ?>">
+                                    <input type="hidden" name="field" value="due">
+                                    <input type="date" class="edit-due<?= $it['due'] === '' ? ' empty' : '' ?>"
+                                           name="value" value="<?= e($it['due']) ?>"
+                                           title="<?= $it['due'] === '' ? 'Set a due date' : 'Due date — clear the field to remove it' ?>"
+                                           onchange="submitList(this.form)">
+                                </form>
                             </td>
                             <?php endif; ?>
                             <!-- Actions: edit the comments, move to another group, delete -->
@@ -1233,13 +1244,29 @@ function render_list(array $items, array $archived = []): string
     th.colw-comp, td.colw-comp { display: none; }
     body.show-completion th.colw-comp, body.show-completion td.colw-comp { display: table-cell; }
     .colw-date { width: 80px; white-space: nowrap; }
-    .colw-due { width: 80px; white-space: nowrap; }
+    .colw-due { width: 112px; white-space: nowrap; }
     th.colw-date, td.colw-date, th.colw-due, td.colw-due { display: none; }
     body.show-dates th.colw-date, body.show-dates td.colw-date,
     body.show-dates th.colw-due, body.show-dates td.colw-due { display: table-cell; }
     .date { font-size: .75rem; color: #6a7280; white-space: nowrap; }
     .date-done { color: #256b34; }
     .date-due { color: #4a5468; }
+
+    /* Due date: reads as plain text in the list, and looks like a field once
+       the pointer is on it. An empty one keeps its dd/mm/yyyy out of sight
+       until then, so rows without a due date stay quiet. */
+    /* (kept above the shared field rule, so it is written to outrank it) */
+    .colw-due input.edit-due {
+        width: 100%; font-size: .75rem; color: #4a5468;
+        padding: .08rem .2rem; border: 1px solid transparent; border-radius: 4px;
+        background: transparent; box-shadow: none;
+    }
+    .colw-due input.edit-due:hover, .colw-due input.edit-due:focus {
+        border-color: #b9c2d2; background: #fff;
+        box-shadow: inset 0 1px 2px rgba(20,30,50,.12);
+    }
+    .colw-due input.edit-due.empty:not(:hover):not(:focus)::-webkit-datetime-edit { color: transparent; }
+    .colw-due input.edit-due.empty:not(:hover):not(:focus)::-webkit-calendar-picker-indicator { opacity: 0; }
     .toolbar .check { display: inline-flex; align-items: center; gap: .3rem; cursor: pointer; color: #444; }
     .toolbar .check input { margin: 0; cursor: pointer; }
 

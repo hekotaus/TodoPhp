@@ -98,10 +98,17 @@ dates** tick box in the toolbar reveals a *Date* column:
 A task can also be given a **due date** when it is added — the *Due* field in
 the add panel, which is optional. It appears in its own *Due* column beside
 the *Date* one, under the same tick box, and the column sorts like the others
-(tasks with no due date go last either way). A group whose tasks have no due
-dates has no *Due* column at all, so the width goes to the task names instead. A due date is a day on a
+(tasks with no due date go last either way). The column appears in every group
+as soon as one task anywhere in the list has a due date, so a date can be set
+on any row; while the list has none at all there is no *Due* column and the
+width goes to the task names instead. A due date is a day on a
 calendar, so it is stored and shown as plain YYYY-MM-DD with no timezone
-attached. It can only be set when the task is added.
+attached.
+
+Click a due date in the list to change it, the same as any other field: the
+cell is a date field that reads as plain text until you point at it, and it
+saves when you pick a date. Clearing the field removes the due date; once the
+last one in the whole list is gone, the column goes with it.
 
 Hovering a date shows the full timestamp. Dates are stored as an absolute
 instant (ISO-8601 with the UTC offset) and displayed in the timezone of
