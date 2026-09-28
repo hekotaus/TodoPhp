@@ -984,15 +984,14 @@ function render_list(array $items): string
     tr:last-child td { border-bottom: none; }
     th { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: #aaa; font-weight: 600; }
 
-    /* Sortable captions. They look like the plain captions they replaced until
-       you point at one, and carry an arrow while their column is the sort. */
+    /* Sortable captions. All four look alike — the arrow is what says which
+       column the panel is sorted by. */
     th .sort {
         font: inherit; letter-spacing: inherit; text-transform: inherit;
-        color: inherit; background: none; border: none; box-shadow: none;
+        color: #2d6cdf; background: none; border: none; box-shadow: none;
         padding: 0; margin: 0; cursor: pointer; white-space: nowrap;
     }
-    th .sort:hover { color: #2d6cdf; text-decoration: underline; }
-    th .sort.active { color: #2d6cdf; }
+    th .sort:hover { text-decoration: underline; }
     th .sort[data-dir="asc"]::after  { content: " \25B2"; font-size: .62rem; }
     th .sort[data-dir="desc"]::after { content: " \25BC"; font-size: .62rem; }
 
@@ -1600,9 +1599,7 @@ function applySort(group, key, dir) {
         rows.forEach(function (r) { tbody.appendChild(r); });
     }
     group.querySelectorAll('th .sort').forEach(function (btn) {
-        var on = btn.getAttribute('data-sort') === key;
-        btn.classList.toggle('active', on);
-        btn.setAttribute('data-dir', on ? dir : '');
+        btn.setAttribute('data-dir', btn.getAttribute('data-sort') === key ? dir : '');
     });
 }
 
